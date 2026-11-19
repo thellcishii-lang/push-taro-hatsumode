@@ -19,37 +19,37 @@ buildConfig:
 # Do not deploy a partial index list with deletion/force options.
 env:
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
-    value: AIzaSyCkX4duzu6Hgfxkcrr4ECaUafeEE6Y4yHA
+    value: AIzaSyAj7KlwJevIf8NA4p9hsuwc_SZkBQcvFP4
     availability:
       - BUILD
       - RUNTIME
   - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-    value: push-taro-event.firebaseapp.com
+    value: push-taro-hatsumode.firebaseapp.com
     availability:
       - BUILD
       - RUNTIME
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
-    value: push-taro-event
+    value: push-taro-hatsumode
     availability:
       - BUILD
       - RUNTIME
   - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
-    value: push-taro-event.firebasestorage.app
+    value: push-taro-hatsumode.firebasestorage.app
     availability:
       - BUILD
       - RUNTIME
   - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
-    value: "603330138408"
+    value: 503202632275
     availability:
       - BUILD
       - RUNTIME
   - variable: NEXT_PUBLIC_FIREBASE_APP_ID
-    value: "1:603330138408:web:75323cfbca8c1ca97a001d"
+    value: 1:503202632275:web:37f4983ea264f72a73aca6
     availability:
       - BUILD
       - RUNTIME
   - variable: NEXT_PUBLIC_FIREBASE_VAPID_KEY
-    value: BClTmE1uclQWcyK4LhEirH5UXKo9ZFWCLyUsPlAsYP2aF69F-RQw2m8SqUIrye3iFrvDLsEjindAY8ownEPjNiA
+    value: BMkEhaQe60pBxp3ATtJd2G9nORN5zhgtuNeiv4a19MLZ2kT72llCfwSvO1QR_s275tXpWvf0JiBqYKIPU5p4cCY
     availability:
       - BUILD
       - RUNTIME
