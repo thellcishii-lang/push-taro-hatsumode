@@ -1,0 +1,45 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // アップロード先パスには主催者の uid が入る（organizers/{uid}/events/...）。
+    // ルールはパス内の uid とログイン uid の一致だけで書き込みを判定する。
+    // Firestore 参照（get）はこのプロジェクトで機能しなかったため使わない。
+    // 読み取りはどちらも公開（登録前の来場者もカードから開く）。
+    // 削除はサーバー（Admin SDK）経由のみ。クライアントからの delete は許可しない。
+    match /organizers/{uid}/events/{eventId}/info-pdfs/{fileName} {
+      allow read: if true;
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && fileName.matches('.*\\.pdf')
+        && request.resource.contentType == 'application/pdf'
+        && request.resource.size <= 10 * 1024 * 1024;
+    }
+    // 配信の宣伝ファイル（PDF / 画像）: お知らせから開くので読み取りは公開。
+    // 書き込みはパス内の uid 本人だけ。種別は拡張子と Content-Type の
+    // 両方で縛り、容量は 10MB まで。
+    match /organizers/{uid}/events/{eventId}/campaign-files/{fileName} {
+      allow read: if true;
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.size <= 10 * 1024 * 1024
+        && (
+          (fileName.matches('.*\\.pdf')
+            && request.resource.contentType == 'application/pdf')
+          || (fileName.matches('.*\\.(png|jpe?g|webp|gif)')
+            && request.resource.contentType.matches('image/.*'))
+        );
+    }
+    // 移行前の旧パス（events/{eventId}/...）: 登録済みファイルの表示用に
+    // 読み取りだけ残し、書き込みは許可しない。
+    match /events/{eventId}/info-pdfs/{fileName} {
+      allow read: if true;
+    }
+    match /events/{eventId}/campaign-files/{fileName} {
+      allow read: if true;
+    }
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

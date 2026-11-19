@@ -1,0 +1,59 @@
+// app/api/events/[eventId]/register/route.ts
+// 参拝者登録 API。端末認証（匿名認証）で得た端末の識別子（uid）をキーに、
+// events/{eventId} 配下へ members（本人確認）と subscribers（プッシュ購読）
+// を保存する。電話番号は一切集めない（登録は「タップで登録」）。
+import { NextResponse } from 'next/server';
+import { authAdmin } from '@/lib/firebase-admin';
+import { enforceRateLimit } from '@/lib/rate-limit';
+import { registerEventVisitor } from '@/lib/event-register';
+
+export const dynamic = 'force-dynamic';
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ eventId: string }> },
+) {
+  const retryAfter = await enforceRateLimit(request, 'event-register', 20, 60 * 1000);
+  if (retryAfter !== null) {
+    return NextResponse.json(
+      { error: 'レート制限を超えました' },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } },
+    );
+  }
+
+  const { eventId } = await params;
+
+  // 端末認証のトークンから端末の識別子（uid）を取り出す。本人確認が無い登録は受けない。
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return NextResponse.json({ error: '認証が必要です' }, { status: 401 });
+  }
+  let deviceUid: string;
+  try {
+    const decoded = await authAdmin.verifyIdToken(authHeader.slice(7));
+    if (typeof decoded.uid !== 'string' || !decoded.uid) {
+      return NextResponse.json({ error: '認証が必要です' }, { status: 401 });
+    }
+    deviceUid = decoded.uid;
+  } catch {
+    return NextResponse.json({ error: '認証の有効期限が切れています' }, { status: 401 });
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'リクエスト形式が不正です' }, { status: 400 });
+  }
+  const fcmToken = typeof body.fcmToken === 'string' ? body.fcmToken.trim() : '';
+  if (!fcmToken || fcmToken.includes('/')) {
+    return NextResponse.json({ error: '有効な fcmToken が必要です' }, { status: 400 });
+  }
+  const lang = typeof body.lang === 'string' ? body.lang : undefined;
+
+  const result = await registerEventVisitor(eventId, { deviceUid, fcmToken, lang });
+  if (!result.ok) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
+  }
+  return NextResponse.json({ ok: true, memberId: result.memberId }, { status: 201 });
+}
