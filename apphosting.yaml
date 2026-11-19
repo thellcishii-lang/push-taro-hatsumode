@@ -67,3 +67,13 @@ env:
       - RUNTIME
   - variable: HATSUMODE_HANDOFF_SECRET
     secret: HATSUMODE_HANDOFF_SECRET
+  - variable: FIREBASE_PROJECT_ID
+    value: push-taro-hatsumode
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: FIREBASE_CLIENT_EMAIL
+    value: firebase-adminsdk-fbsvc@push-taro-hatsumode.iam.gserviceaccount.com
+    availability:
+      - BUILD
+      - RUNTIME
