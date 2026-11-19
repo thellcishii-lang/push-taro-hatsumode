@@ -65,3 +65,5 @@ env:
     secret: CRON_SECRET
     availability:
       - RUNTIME
+  - variable: HATSUMODE_HANDOFF_SECRET
+    secret: HATSUMODE_HANDOFF_SECRET
