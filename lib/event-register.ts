@@ -17,7 +17,7 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { db, messaging } from './firebase-admin';
 import { EVENT_SUBCOLLECTIONS, EventConfig, jstDateString, localeTopic } from './event';
-import { isLocale, normalizeLocale, type Locale } from './i18n';
+import { isLocale, normalizeLocale, SUPPORTED_LOCALES, type Locale } from './i18n';
 import { getEvent } from './event-store';
 import { memberIdForDevice } from './event-coupon';
 
@@ -62,6 +62,55 @@ export type RegisterVisitorResult =
 
 function eventRef(eventId: string) {
   return db.collection('events').doc(eventId);
+}
+
+/**
+ * 言語別 FCM トピックの所属を「その言語のトピックだけ」に揃え直す。
+ *
+ * 配信は全言語のトピックへ送られ、未翻訳の言語には日本語の文面が
+ * そのまま届く。そのため1つのトークンが2つの言語トピックに残ると、
+ * 同じ通知が二重に届く。解除はベストエフォートで、失敗した解除や
+ * トークンの差し替えがあると所属がずれていくので、登録・言語変更の
+ * たびにここで揃え直して自己修復する。
+ *
+ * - previousToken があり現在のトークンと異なる場合、旧トークンは
+ *   全言語のトピックから外す（差し替え前のトークンへ送り続けない）。
+ * - 現在のトークンは、自分の言語以外のトピックから外してから、
+ *   自分の言語のトピックへ登録する。
+ * - 個々の解除・登録の失敗は握りつぶし（警告ログのみ）、呼び出し元の
+ *   登録・言語変更自体は必ず成功させる。
+ */
+async function syncLocaleTopicMembership(
+  eventId: string,
+  token: string,
+  lang: Locale,
+  previousToken?: string,
+): Promise<void> {
+  if (previousToken && previousToken !== token) {
+    for (const locale of SUPPORTED_LOCALES) {
+      try {
+        await messaging.unsubscribeFromTopic(
+          [previousToken],
+          localeTopic(eventId, locale),
+        );
+      } catch (error) {
+        console.warn('[EVENT] 旧トークンのトピック解除をスキップ:', error);
+      }
+    }
+  }
+  for (const locale of SUPPORTED_LOCALES) {
+    if (locale === lang) continue;
+    try {
+      await messaging.unsubscribeFromTopic([token], localeTopic(eventId, locale));
+    } catch (error) {
+      console.warn('[EVENT] トピック解除をスキップ:', error);
+    }
+  }
+  try {
+    await messaging.subscribeToTopic([token], localeTopic(eventId, lang));
+  } catch (error) {
+    console.warn('[EVENT] FCMトピック登録をスキップ:', error);
+  }
 }
 
 /**
@@ -110,9 +159,11 @@ export async function registerEventVisitor(
   }
   // 言語は個人の選択を優先し、無ければイベントのデフォルト言語で登録する
   const lang = normalizeLocale(input.lang, event.defaultLocale);
-  const previousLang = alreadyRegistered
-    ? normalizeLocale(subscriberSnap.data()?.lang, event.defaultLocale)
-    : null;
+  // 上書きする前に、前回のトークンを控える（トークンが差し替わっていたら
+  // 旧トークンのトピック所属も解除するため）。
+  const previousData = alreadyRegistered ? subscriberSnap.data() : undefined;
+  const previousToken =
+    typeof previousData?.fcmToken === 'string' ? previousData.fcmToken : undefined;
   batch.set(subscriberRef, {
     memberId,
     fcmToken: input.fcmToken,
@@ -122,19 +173,9 @@ export async function registerEventVisitor(
   });
   await batch.commit();
 
-  // 配信は言語別 FCM トピック宛て。失敗しても登録自体は成立させる。
-  // 言語が変わった再登録では、旧言語のトピックから外して付け替える。
-  try {
-    if (previousLang && previousLang !== lang) {
-      await messaging.unsubscribeFromTopic(
-        [input.fcmToken],
-        localeTopic(eventId, previousLang),
-      );
-    }
-    await messaging.subscribeToTopic([input.fcmToken], localeTopic(eventId, lang));
-  } catch (error) {
-    console.warn('[EVENT] FCMトピック登録をスキップ:', error);
-  }
+  // 配信は言語別 FCM トピック宛て。所属を毎回揃え直す（失敗しても
+  // 登録自体は成立させる）。
+  await syncLocaleTopicMembership(eventId, input.fcmToken, lang, previousToken);
 
   return { ok: true, memberId };
 }
@@ -171,12 +212,9 @@ export async function updateSubscriberLanguage(
 
   const token = typeof data.fcmToken === 'string' ? data.fcmToken : '';
   if (token) {
-    try {
-      await messaging.unsubscribeFromTopic([token], localeTopic(eventId, previous));
-      await messaging.subscribeToTopic([token], localeTopic(eventId, lang));
-    } catch (error) {
-      console.warn('[EVENT] 言語変更時のトピック付け替えをスキップ:', error);
-    }
+    // 旧言語だけでなく、自分の言語以外の全トピックから外して揃え直す
+    // （過去に解除が失敗して残っていても、ここで修復される）。
+    await syncLocaleTopicMembership(eventId, token, lang);
   }
   return { ok: true };
 }
