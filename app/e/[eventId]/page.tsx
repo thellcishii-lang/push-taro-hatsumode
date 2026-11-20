@@ -229,6 +229,8 @@ export default function EventVisitorPage() {
   const [qrBusy, setQrBusy] = useState(false);
   const [qrFeedback, setQrFeedback] = useState<{ text: string; error: boolean } | null>(null);
   const qrScannerRef = useRef<Html5Qrcode | null>(null);
+  // 登録状態の確認は開いたときに1回だけ（二重実行の防止）
+  const statusCheckedRef = useRef(false);
   // カタログで展開中の出店者グループ（検索中は全グループ展開扱い）
   const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(new Set());
 
@@ -301,6 +303,57 @@ export default function EventVisitorPage() {
       // 失敗しても画面は止めない（登録ボタンの処理でも再試行する）
     });
   }, [event, user]);
+
+  // 登録済みの端末には登録バナーを出さない: 開いたときに登録状態を確認し、
+  // 登録済みならそのまま利用画面（done）へ進める。あわせて、通知許可が
+  // 済んでいる端末では FCM トークンを裏で付け直し、トークンの差し替えや
+  // 言語トピックのずれを再登録なしで自己修復する。許可ダイアログはここでは
+  // 絶対に出さない（requestPermission は呼ばない）。未登録・確認失敗のときは
+  // 従来どおり登録フェーズのままにする。
+  useEffect(() => {
+    if (!user || !event || phase !== 'register') return;
+    if (statusCheckedRef.current) return;
+    statusCheckedRef.current = true;
+    let cancelled = false;
+    (async () => {
+      try {
+        const idToken = await user.getIdToken();
+        const res = await fetch(`/api/events/${eventId}/registration-status`, {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (cancelled || !res.ok || data.registered !== true) return;
+        setPhase('done');
+        // トークンの付け直し（失敗しても利用画面はそのまま出す）
+        try {
+          if (
+            typeof Notification === 'undefined' ||
+            Notification.permission !== 'granted'
+          ) {
+            return;
+          }
+          const fcmToken = await requestFCMToken({ shopName: event.name });
+          if (!fcmToken || cancelled) return;
+          const healToken = await user.getIdToken();
+          await fetch(`/api/events/${eventId}/register`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${healToken}`,
+            },
+            body: JSON.stringify({ fcmToken, lang: locale }),
+          });
+        } catch {
+          // 付け直しに失敗しても画面は止めない（次に開いたとき再試行される）
+        }
+      } catch {
+        // 状態が読めなくても従来どおり登録フェーズのままにする
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, event, phase, eventId, locale]);
 
   const handleLocaleChange = async (next: Locale) => {
     setLocale(next);
