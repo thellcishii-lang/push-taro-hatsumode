@@ -17,6 +17,9 @@ buildConfig:
 # npm run check:firestore-indexes -- --project PROJECT_ID
 # Add only missing indexes with the same command plus --apply, then wait for READY.
 # Do not deploy a partial index list with deletion/force options.
+# INFOMAIL_USER / INFOMAIL_PASS are Secret Manager secrets.
+# After setting their values, run grantaccess for both secrets and
+# create a new rollout so the backend picks up the new versions.
 env:
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
     value: AIzaSyAj7KlwJevIf8NA4p9hsuwc_SZkBQcvFP4
