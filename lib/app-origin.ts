@@ -6,13 +6,16 @@
 // コードを含まない共有 lib に切り出した。lib/exhibitor-access.ts は互換の
 // ため APP_ORIGIN / resolveAppOrigin を re-export している。
 
+import { VARIANT_APP_ORIGIN } from './variant-identity';
+
 /**
  * 本番の App Hosting origin（初詣アプリ自身の URL）。
+ * 値は lib/variant-identity.ts のプロジェクト ID から導出する（直書きすると
+ * フォーク元の URL が残る事故のもとになるため）。
  * 将来の独自ドメイン化に備え、環境変数 NEXT_PUBLIC_APP_ORIGIN があれば
  * そちらを優先する（末尾のスラッシュは取り除く）。
  */
-export const APP_ORIGIN =
-  'https://push-taro-hatsumode--push-taro-hatsumode.asia-east1.hosted.app';
+export const APP_ORIGIN = VARIANT_APP_ORIGIN;
 
 export function resolveAppOrigin(): string {
   const fromEnv = process.env.NEXT_PUBLIC_APP_ORIGIN?.trim();
