@@ -10,6 +10,8 @@ import {
   isFinalizationDue,
   isResetDue,
   isValidResetTime,
+  normalizeGachaPrizes,
+  parseGachaPrizes,
   receivesCapsPropagation,
   resetDateKeyFor,
   resolveCreateStatus,
@@ -398,5 +400,102 @@ describe('subscriberUsage', () => {
 
   it('枠が 0 以下なら 0% normal', () => {
     expect(subscriberUsage(10, 0)).toEqual({ percent: 0, level: 'normal' });
+  });
+});
+
+describe('normalizeGachaPrizes（ガチャ等位設定の検証）', () => {
+  it('未指定は空配列', () => {
+    expect(normalizeGachaPrizes(undefined)).toEqual([]);
+    expect(normalizeGachaPrizes(null)).toEqual([]);
+  });
+
+  it('空の枠は読み飛ばし、等位の昇順に並べる', () => {
+    expect(
+      normalizeGachaPrizes([
+        { rank: 3, name: 'お菓子', probability: 30, stock: null },
+        { rank: 2, name: '', probability: 0, stock: null },
+        { rank: 1, name: 'お守り', probability: 10, stock: 5 },
+      ]),
+    ).toEqual([
+      { rank: 1, name: 'お守り', probability: 10, stock: 5 },
+      { rank: 3, name: 'お菓子', probability: 30, stock: null },
+    ]);
+  });
+
+  it('確率の合計が100を超えたら弾く', () => {
+    expect(() =>
+      normalizeGachaPrizes([
+        { rank: 1, name: 'A', probability: 60, stock: null },
+        { rank: 2, name: 'B', probability: 50, stock: null },
+      ]),
+    ).toThrow('ガチャの当選確率の合計は100%以内にしてください');
+  });
+
+  it('確率の合計がちょうど100は通る', () => {
+    expect(
+      normalizeGachaPrizes([
+        { rank: 1, name: 'A', probability: 40, stock: null },
+        { rank: 2, name: 'B', probability: 60, stock: null },
+      ]),
+    ).toHaveLength(2);
+  });
+
+  it('等位の範囲外・重複を弾く', () => {
+    expect(() =>
+      normalizeGachaPrizes([{ rank: 11, name: 'A', probability: 10, stock: null }]),
+    ).toThrow('ガチャの等位は1〜10で指定してください');
+    expect(() =>
+      normalizeGachaPrizes([{ rank: 0, name: 'A', probability: 10, stock: null }]),
+    ).toThrow('ガチャの等位は1〜10で指定してください');
+    expect(() =>
+      normalizeGachaPrizes([
+        { rank: 1, name: 'A', probability: 10, stock: null },
+        { rank: 1, name: 'B', probability: 10, stock: null },
+      ]),
+    ).toThrow('ガチャの等位が重複しています');
+  });
+
+  it('確率・当選本数の形式が不正なら弾く', () => {
+    expect(() =>
+      normalizeGachaPrizes([{ rank: 1, name: 'A', probability: 10.5, stock: null }]),
+    ).toThrow('ガチャの当選確率は0〜100の整数で指定してください');
+    expect(() =>
+      normalizeGachaPrizes([{ rank: 1, name: 'A', probability: 101, stock: null }]),
+    ).toThrow('ガチャの当選確率は0〜100の整数で指定してください');
+    expect(() =>
+      normalizeGachaPrizes([{ rank: 1, name: 'A', probability: 10, stock: -1 }]),
+    ).toThrow('ガチャの当選本数は0以上の整数か、無制限で指定してください');
+  });
+
+  it('確率があるのに景品名が空なら弾く', () => {
+    expect(() =>
+      normalizeGachaPrizes([{ rank: 2, name: '', probability: 10, stock: null }]),
+    ).toThrow('2等の景品名を入力してください');
+  });
+
+  it('配列でない入力は弾く', () => {
+    expect(() => normalizeGachaPrizes('x')).toThrow('ガチャ設定の形式が不正です');
+  });
+});
+
+describe('parseGachaPrizes（保存値の防御読み）', () => {
+  it('項目が無い・配列でない場合は空配列', () => {
+    expect(parseGachaPrizes(undefined)).toEqual([]);
+    expect(parseGachaPrizes('x')).toEqual([]);
+  });
+
+  it('不正な要素は落とし、正常な要素だけを昇順で返す', () => {
+    expect(
+      parseGachaPrizes([
+        { rank: 2, name: 'B', probability: 20, stock: null },
+        { rank: 99, name: 'X', probability: 10, stock: null },
+        { rank: 1, name: 'A', probability: 10, stock: 3 },
+        { rank: 1, name: 'A2', probability: 10, stock: null },
+        'garbage',
+      ]),
+    ).toEqual([
+      { rank: 1, name: 'A', probability: 10, stock: 3 },
+      { rank: 2, name: 'B', probability: 20, stock: null },
+    ]);
   });
 });

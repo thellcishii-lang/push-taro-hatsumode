@@ -18,7 +18,9 @@ import {
   isValidResetTime,
   EVENT_SUBCOLLECTIONS,
   normalizeEventLinks,
+  normalizeGachaPrizes,
   parseEventLinks,
+  parseGachaPrizes,
   receivesCapsPropagation,
   seasonEndDateFor,
 } from './event';
@@ -45,6 +47,12 @@ function toEventConfig(id: string, data: FirebaseFirestore.DocumentData): EventC
     defaultLocale: normalizeLocale(data.defaultLocale),
     // 入場用QRは既定オフ。導入前に作られたイベントには項目自体が無い
     admissionQrEnabled: data.admissionQrEnabled === true,
+    // おみくじは既定オン（導入前から表示されていた）。明示的に false の
+    // ときだけオフとして読む
+    omikujiEnabled: data.omikujiEnabled !== false,
+    // ガチャは既定オフ。導入前に作られたイベントには項目自体が無い
+    gachaEnabled: data.gachaEnabled === true,
+    gachaPrizes: parseGachaPrizes(data.gachaPrizes),
     // 主催者リンクは導入前のイベントには項目自体が無い
     links: parseEventLinks(data.links),
     couponCap: data.couponCap ?? MAX_COUPONS_PER_EVENT,
@@ -80,6 +88,20 @@ export async function createEvent(input: CreateEventInput): Promise<EventConfig>
   if (input.defaultLocale !== undefined && !isLocale(input.defaultLocale)) {
     throw new Error('対応していない言語です（ja / en / zh / ko）');
   }
+  if (
+    input.omikujiEnabled !== undefined &&
+    typeof input.omikujiEnabled !== 'boolean'
+  ) {
+    throw new Error('おみくじ設定の形式が不正です');
+  }
+  if (
+    input.gachaEnabled !== undefined &&
+    typeof input.gachaEnabled !== 'boolean'
+  ) {
+    throw new Error('ガチャ設定の形式が不正です');
+  }
+  // ガチャ等位設定は検証してから正規化した形で保存する
+  const gachaPrizes = normalizeGachaPrizes(input.gachaPrizes);
 
   const ref = db.collection(EVENTS_COLLECTION).doc();
   const data: EventDocData = {
@@ -93,6 +115,9 @@ export async function createEvent(input: CreateEventInput): Promise<EventConfig>
     subscriberCap: input.subscriberCap ?? DEFAULT_SUBSCRIBER_CAP,
     defaultLocale: input.defaultLocale ?? DEFAULT_LOCALE,
     admissionQrEnabled: input.admissionQrEnabled ?? false,
+    omikujiEnabled: input.omikujiEnabled ?? true,
+    gachaEnabled: input.gachaEnabled ?? false,
+    gachaPrizes,
     links: normalizeEventLinks(input.links),
     couponCap: input.couponCap ?? MAX_COUPONS_PER_EVENT,
     backupRetentionDays:
@@ -259,6 +284,9 @@ export type UpdateEventInput = Partial<
     | 'subscriberCap'
     | 'defaultLocale'
     | 'admissionQrEnabled'
+    | 'omikujiEnabled'
+    | 'gachaEnabled'
+    | 'gachaPrizes'
     | 'links'
     | 'couponCap'
     | 'backupRetentionDays'
@@ -285,6 +313,23 @@ export async function updateEvent(
   ) {
     throw new Error('入場用QR設定の形式が不正です');
   }
+  if (
+    patch.omikujiEnabled !== undefined &&
+    typeof patch.omikujiEnabled !== 'boolean'
+  ) {
+    throw new Error('おみくじ設定の形式が不正です');
+  }
+  if (
+    patch.gachaEnabled !== undefined &&
+    typeof patch.gachaEnabled !== 'boolean'
+  ) {
+    throw new Error('ガチャ設定の形式が不正です');
+  }
+  // ガチャ等位設定は検証してから正規化した形で保存する
+  const gachaPrizes =
+    patch.gachaPrizes !== undefined
+      ? normalizeGachaPrizes(patch.gachaPrizes)
+      : undefined;
   if (
     patch.endDateUndecided !== undefined &&
     typeof patch.endDateUndecided !== 'boolean'
@@ -326,6 +371,7 @@ export async function updateEvent(
     .update({
       ...patch,
       ...(links !== undefined ? { links } : {}),
+      ...(gachaPrizes !== undefined ? { gachaPrizes } : {}),
       updatedAt: FieldValue.serverTimestamp(),
     });
 }

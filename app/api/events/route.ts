@@ -9,6 +9,7 @@ import {
 } from '@/lib/event-store';
 import {
   EventResetMode,
+  GachaPrize,
   canCreateAnotherEvent,
   resolveCreateStatus,
 } from '@/lib/event';
@@ -105,6 +106,14 @@ export async function POST(request: Request) {
         typeof body.admissionQrEnabled === 'boolean'
           ? body.admissionQrEnabled
           : undefined,
+      omikujiEnabled:
+        typeof body.omikujiEnabled === 'boolean'
+          ? body.omikujiEnabled
+          : undefined,
+      gachaEnabled:
+        typeof body.gachaEnabled === 'boolean' ? body.gachaEnabled : undefined,
+      // ガチャ等位設定の検証は createEvent 側で行う（不正なら 400）
+      gachaPrizes: body.gachaPrizes as GachaPrize[] | undefined,
       subscriberCap: caps.subscriberCap,
       couponCap: caps.couponCap,
       backupRetentionDays: body.backupRetentionDays as number | undefined,

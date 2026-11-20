@@ -211,3 +211,93 @@ describe('終了日のシーズン上限（1月31日まで）', () => {
     );
   });
 });
+
+describe('おみくじ・ガチャ設定', () => {
+  it('作成: 既定はおみくじオン・ガチャオフ・等位設定なし', async () => {
+    const event = await createEvent({
+      name: 'テストイベント',
+      ownerUid: 'owner-1',
+      startDate: '2026-12-20',
+      endDate: '2027-01-31',
+    });
+    expect(event.omikujiEnabled).toBe(true);
+    expect(event.gachaEnabled).toBe(false);
+    expect(event.gachaPrizes).toEqual([]);
+  });
+
+  it('作成: 旧データ（項目なし）はおみくじオン・ガチャオフとして読む', async () => {
+    const events = await listEventsByOwner('owner-1');
+    const legacy = events.find((event) => event.id === 'ev-live');
+    expect(legacy?.omikujiEnabled).toBe(true);
+    expect(legacy?.gachaEnabled).toBe(false);
+    expect(legacy?.gachaPrizes).toEqual([]);
+  });
+
+  it('作成: ガチャ設定は正規化されて保存される（空行は落ち、昇順になる）', async () => {
+    const event = await createEvent({
+      name: 'テストイベント',
+      ownerUid: 'owner-1',
+      startDate: '2026-12-20',
+      endDate: '2027-01-31',
+      gachaEnabled: true,
+      gachaPrizes: [
+        { rank: 2, name: 'お菓子', probability: 30, stock: null },
+        { rank: 3, name: '', probability: 0, stock: null },
+        { rank: 1, name: 'お守り', probability: 10, stock: 5 },
+      ],
+    });
+    expect(event.gachaEnabled).toBe(true);
+    expect(event.gachaPrizes).toEqual([
+      { rank: 1, name: 'お守り', probability: 10, stock: 5 },
+      { rank: 2, name: 'お菓子', probability: 30, stock: null },
+    ]);
+  });
+
+  it('作成: 確率の合計が100を超えるガチャ設定は弾く', async () => {
+    await expect(
+      createEvent({
+        name: 'テストイベント',
+        ownerUid: 'owner-1',
+        startDate: '2026-12-20',
+        endDate: '2027-01-31',
+        gachaEnabled: true,
+        gachaPrizes: [
+          { rank: 1, name: 'A', probability: 60, stock: null },
+          { rank: 2, name: 'B', probability: 50, stock: null },
+        ],
+      }),
+    ).rejects.toThrow('ガチャの当選確率の合計は100%以内にしてください');
+  });
+
+  it('更新: おみくじ・ガチャのオンオフと等位設定を保存できる', async () => {
+    await updateEvent('ev-live', {
+      omikujiEnabled: false,
+      gachaEnabled: true,
+      gachaPrizes: [{ rank: 1, name: 'お守り', probability: 20, stock: null }],
+    });
+    const events = await listEventsByOwner('owner-1');
+    const updated = events.find((event) => event.id === 'ev-live');
+    expect(updated?.omikujiEnabled).toBe(false);
+    expect(updated?.gachaEnabled).toBe(true);
+    expect(updated?.gachaPrizes).toEqual([
+      { rank: 1, name: 'お守り', probability: 20, stock: null },
+    ]);
+  });
+
+  it('更新: フラグの形式が不正なら弾く', async () => {
+    await expect(
+      updateEvent('ev-live', { omikujiEnabled: 'yes' as never }),
+    ).rejects.toThrow('おみくじ設定の形式が不正です');
+    await expect(
+      updateEvent('ev-live', { gachaEnabled: 1 as never }),
+    ).rejects.toThrow('ガチャ設定の形式が不正です');
+  });
+
+  it('更新: 等位の範囲外を含むガチャ設定は弾く', async () => {
+    await expect(
+      updateEvent('ev-live', {
+        gachaPrizes: [{ rank: 11, name: 'A', probability: 10, stock: null }],
+      }),
+    ).rejects.toThrow('ガチャの等位は1〜10で指定してください');
+  });
+});

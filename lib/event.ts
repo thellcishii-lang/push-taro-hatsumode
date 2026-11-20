@@ -31,6 +31,28 @@ export interface EventLink {
   url: string;
 }
 
+/** ガチャの等位の最大値（1等〜10等まで設定できる）。 */
+export const MAX_GACHA_RANK = 10;
+
+/**
+ * ガチャの等位設定（1等〜10等、主催者が自由に設定する）。
+ * イベントドキュメントの gachaPrizes フィールドに配列で持つ。
+ * - probability: 当選確率（整数%）。全等位の合計は100以下で、
+ *   満たない分はハズレになる。
+ * - stock: その等位の当選本数の上限（イベント全体）。null は無制限。
+ * - 景品名が空か確率0の等位は無効（抽選対象にならない）。
+ */
+export interface GachaPrize {
+  /** 等位（1〜10） */
+  rank: number;
+  /** 景品名（主催者が書いた原文のまま表示する。自動翻訳しない） */
+  name: string;
+  /** 当選確率（整数%、0〜100） */
+  probability: number;
+  /** 当選本数の上限。null は無制限 */
+  stock: number | null;
+}
+
 export interface EventConfig {
   id: string;
   /** イベント名（例: 神社名・行事名） */
@@ -62,6 +84,23 @@ export interface EventConfig {
    * 入場時に表示できる。オフの間は参拝者画面に何も出ず、保存もできない。
    */
   admissionQrEnabled: boolean;
+  /**
+   * おみくじを使うかどうか（主催者が設定。既定オン）。
+   * 導入前に作られたイベントには項目自体が無いため、読み取り時は true に倒す
+   * （従来どおりおみくじが出る）。
+   */
+  omikujiEnabled: boolean;
+  /**
+   * ガチャを使うかどうか（主催者が設定。既定オフ）。
+   * 導入前に作られたイベントには項目自体が無いため、読み取り時は false に倒す。
+   */
+  gachaEnabled: boolean;
+  /**
+   * ガチャの等位設定（1等〜10等）。gachaEnabled がオンでも、設定が
+   * 無い等位は抽選対象にならない。導入前に作られたイベントには項目自体が
+   * 無いため、読み取り時は空配列に倒す。
+   */
+  gachaPrizes: GachaPrize[];
   /**
    * 主催者リンク（最大 MAX_EVENT_LINKS 件）。設定画面で登録し、参拝者画面に
    * タイトル付きで表示する（案内PDFと同じく登録前でも見える位置）。
@@ -141,6 +180,9 @@ export interface CreateEventInput {
   subscriberCap?: number;
   defaultLocale?: Locale;
   admissionQrEnabled?: boolean;
+  omikujiEnabled?: boolean;
+  gachaEnabled?: boolean;
+  gachaPrizes?: GachaPrize[];
   links?: EventLink[];
   couponCap?: number;
   backupRetentionDays?: number;
@@ -230,6 +272,143 @@ export function parseEventLinks(value: unknown): EventLink[] {
     }
   }
   return links;
+}
+
+function readGachaPrizeFields(
+  item: unknown,
+): { rank: unknown; name: string; probability: unknown; stock: unknown } | null {
+  if (!item || typeof item !== 'object') return null;
+  const raw = item as {
+    rank?: unknown;
+    name?: unknown;
+    probability?: unknown;
+    stock?: unknown;
+  };
+  return {
+    rank: raw.rank,
+    name: typeof raw.name === 'string' ? raw.name.trim() : '',
+    probability: raw.probability,
+    stock: raw.stock,
+  };
+}
+
+/**
+ * ガチャ等位設定の入力を検証して正規化する（書き込み用。不正なら throw）。
+ * - 等位は 1〜MAX_GACHA_RANK の整数で、重複はエラー
+ * - 確率は 0〜100 の整数。当選本数（stock）は null（無制限）か 0 以上の整数
+ * - 確率が 0 より大きい等位には景品名が必須（当選しても景品が表示できないため）
+ * - 全等位の確率の合計は 100 以下（満たない分はハズレ）
+ * - 景品名が空・確率0・本数未指定の「空の枠」は未指定として読み飛ばす
+ *   （設定画面の空行がこれに当たる）
+ * 戻り値は等位の昇順に並べる。
+ */
+export function normalizeGachaPrizes(input: unknown): GachaPrize[] {
+  if (input === undefined || input === null) return [];
+  if (!Array.isArray(input)) throw new Error('ガチャ設定の形式が不正です');
+  const prizes: GachaPrize[] = [];
+  const seenRanks = new Set<number>();
+  for (const item of input) {
+    const fields = readGachaPrizeFields(item);
+    if (!fields) throw new Error('ガチャ設定の形式が不正です');
+    const { rank, name, probability, stock } = fields;
+    if (
+      typeof rank !== 'number' ||
+      !Number.isInteger(rank) ||
+      rank < 1 ||
+      rank > MAX_GACHA_RANK
+    ) {
+      throw new Error(`ガチャの等位は1〜${MAX_GACHA_RANK}で指定してください`);
+    }
+    if (
+      probability !== undefined &&
+      probability !== null &&
+      (typeof probability !== 'number' ||
+        !Number.isInteger(probability) ||
+        probability < 0 ||
+        probability > 100)
+    ) {
+      throw new Error('ガチャの当選確率は0〜100の整数で指定してください');
+    }
+    if (
+      stock !== undefined &&
+      stock !== null &&
+      (typeof stock !== 'number' || !Number.isInteger(stock) || stock < 0)
+    ) {
+      throw new Error('ガチャの当選本数は0以上の整数か、無制限で指定してください');
+    }
+    const normalizedProbability =
+      typeof probability === 'number' ? probability : 0;
+    const normalizedStock = typeof stock === 'number' ? stock : null;
+    // 空の枠（設定画面の未入力行）は読み飛ばす
+    if (!name && normalizedProbability === 0 && normalizedStock === null) {
+      continue;
+    }
+    if (seenRanks.has(rank)) {
+      throw new Error('ガチャの等位が重複しています');
+    }
+    seenRanks.add(rank);
+    if (normalizedProbability > 0 && !name) {
+      throw new Error(`${rank}等の景品名を入力してください`);
+    }
+    prizes.push({
+      rank,
+      name,
+      probability: normalizedProbability,
+      stock: normalizedStock,
+    });
+  }
+  const total = prizes.reduce((sum, prize) => sum + prize.probability, 0);
+  if (total > 100) {
+    throw new Error('ガチャの当選確率の合計は100%以内にしてください');
+  }
+  return prizes.sort((a, b) => a.rank - b.rank);
+}
+
+/**
+ * 保存済みのガチャ等位設定を防御的に読む（読み取り用。throw しない）。
+ * 項目が無い旧イベントは空配列。不正な要素は落とし、等位の昇順に並べる。
+ */
+export function parseGachaPrizes(value: unknown): GachaPrize[] {
+  if (!Array.isArray(value)) return [];
+  const prizes: GachaPrize[] = [];
+  const seenRanks = new Set<number>();
+  for (const item of value) {
+    const fields = readGachaPrizeFields(item);
+    if (!fields) continue;
+    const { rank, name, probability, stock } = fields;
+    if (
+      typeof rank !== 'number' ||
+      !Number.isInteger(rank) ||
+      rank < 1 ||
+      rank > MAX_GACHA_RANK ||
+      seenRanks.has(rank)
+    ) {
+      continue;
+    }
+    if (
+      typeof probability !== 'number' ||
+      !Number.isInteger(probability) ||
+      probability < 0 ||
+      probability > 100
+    ) {
+      continue;
+    }
+    if (
+      stock !== null &&
+      stock !== undefined &&
+      (typeof stock !== 'number' || !Number.isInteger(stock) || stock < 0)
+    ) {
+      continue;
+    }
+    seenRanks.add(rank);
+    prizes.push({
+      rank,
+      name,
+      probability,
+      stock: typeof stock === 'number' ? stock : null,
+    });
+  }
+  return prizes.sort((a, b) => a.rank - b.rank);
 }
 
 /**

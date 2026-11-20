@@ -3,6 +3,8 @@
 // - 出店者セッション（イベント専用コードで発行したカスタムトークン）:
 //   自社クーポンのみ。他社は403。
 // - 主催者（イベント所有者）: 管理画面側の消込として全クーポン可。
+// ガチャの景品交換コードもこのルートで受け付け、主催者発行の景品のため
+// 主催者・出店者のどちらでも消込できる（lib/event-gacha.ts 参照）。
 import { NextResponse } from 'next/server';
 import { getRequestAuth } from '@/lib/event-auth';
 import { getEvent } from '@/lib/event-store';
@@ -11,6 +13,7 @@ import {
   getExhibitor,
   redeemClaim,
 } from '@/lib/event-coupon';
+import { isGachaRedemptionCode, redeemGachaCode } from '@/lib/event-gacha';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,7 +62,11 @@ export async function POST(
     return NextResponse.json({ error: 'claimId が必要です' }, { status: 400 });
   }
 
-  const result = await redeemClaim(eventId, claimId, actor);
+  // ガチャの景品交換コード（gacha_ 接頭辞）はガチャ側の消込へ振り分ける。
+  // それ以外は従来どおりクーポン取得記録の消込。
+  const result = isGachaRedemptionCode(claimId)
+    ? await redeemGachaCode(eventId, claimId, actor)
+    : await redeemClaim(eventId, claimId, actor);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }

@@ -25,6 +25,9 @@ export async function GET(
       defaultLocale: event.defaultLocale,
       // 入場用QRの取り込みが有効かどうか（参拝者画面の表示制御に使う）
       admissionQrEnabled: event.admissionQrEnabled,
+      // おみくじ・ガチャを使うかどうか（参拝者画面の表示制御に使う）
+      omikujiEnabled: event.omikujiEnabled,
+      gachaEnabled: event.gachaEnabled,
       // 主催者リンク（最大3件、タイトル付きで参拝者画面に表示する）
       links: event.links,
     },

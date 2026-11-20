@@ -1,9 +1,10 @@
 // lib/event-reset-execution.test.ts
 // 日次リセットと終了処理の実行テスト（フェイク Firestore）。
 // 初詣の要点:
-// - おみくじ抽選記録（omikujiDraws）と行事予定（schedule）は
+// - おみくじ抽選記録（omikujiDraws）と行事予定（schedule）、
+//   ガチャ抽選記録（gachaDraws）と当選数カウンタ（gachaPrizeCounts）は
 //   日次リセットで消えない。
-// - 終了処理（1月31日 24:00 の最終消去）では両方とも消える。
+// - 終了処理（1月31日 24:00 の最終消去）ではすべて消える。
 //   他イベントの抽選記録には触れない。
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -201,6 +202,29 @@ function seedAll() {
     memberId: 'mem-1',
     grade: 'kichi',
   });
+  fake.seed('gachaDraws', `${EVENT_ID}_mem-1`, {
+    eventId: EVENT_ID,
+    memberId: 'mem-1',
+    rank: 1,
+  });
+  fake.seed('gachaDraws', `${EVENT_ID}_mem-2`, {
+    eventId: EVENT_ID,
+    memberId: 'mem-2',
+    rank: null,
+  });
+  fake.seed('gachaDraws', 'ev-other_mem-1', {
+    eventId: 'ev-other',
+    memberId: 'mem-1',
+    rank: 2,
+  });
+  fake.seed('gachaPrizeCounts', EVENT_ID, {
+    eventId: EVENT_ID,
+    counts: { '1': 1 },
+  });
+  fake.seed('gachaPrizeCounts', 'ev-other', {
+    eventId: 'ev-other',
+    counts: { '2': 1 },
+  });
 }
 
 describe('日次リセットとおみくじ・行事予定', () => {
@@ -215,6 +239,9 @@ describe('日次リセットとおみくじ・行事予定', () => {
     expect(fake.count(`events/${EVENT_ID}/members`)).toBe(0);
     // おみくじ抽選記録は日次リセットの対象外（期間中1回を守る台帳）
     expect(fake.count('omikujiDraws')).toBe(3);
+    // ガチャ抽選記録と当選数カウンタも日次リセットの対象外
+    expect(fake.count('gachaDraws')).toBe(3);
+    expect(fake.getDoc(`gachaPrizeCounts/${EVENT_ID}`)).toBeDefined();
     // 行事予定も対象外（複数日にまたがる）
     expect(fake.count(`events/${EVENT_ID}/schedule`)).toBe(2);
     // 完了記録が付く
@@ -231,6 +258,12 @@ describe('日次リセットとおみくじ・行事予定', () => {
     // 他イベントの抽選記録には触れない
     expect(fake.count('omikujiDraws')).toBe(1);
     expect(fake.getDoc('omikujiDraws/ev-other_mem-1')).toBeDefined();
+    // ガチャ抽選記録と当選数カウンタも消える（他イベント分は残る）
+    expect(result.deletedGachaDrawCount).toBe(2);
+    expect(fake.count('gachaDraws')).toBe(1);
+    expect(fake.getDoc('gachaDraws/ev-other_mem-1')).toBeDefined();
+    expect(fake.getDoc(`gachaPrizeCounts/${EVENT_ID}`)).toBeUndefined();
+    expect(fake.getDoc('gachaPrizeCounts/ev-other')).toBeDefined();
     expect(fake.getDoc(`events/${EVENT_ID}`)?.status).toBe('ended');
   });
 
