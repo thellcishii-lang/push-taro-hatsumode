@@ -2,16 +2,18 @@ import { describe, expect, it } from 'vitest';
 import {
   EventConfig,
   MAX_CONCURRENT_EVENTS,
+  NEW_YEAR_EARLY_RESET_TIME,
   canCreateAnotherEvent,
   canDeleteEvent,
   countConcurrentEvents,
   countsTowardConcurrentCap,
-  effectiveResetTime,
   isFinalizationDue,
   isResetDue,
   isValidResetTime,
   receivesCapsPropagation,
+  resetDateKeyFor,
   resolveCreateStatus,
+  seasonEndDateFor,
   subscriberUsage,
   jstDateString,
   jstTimeString,
@@ -19,13 +21,21 @@ import {
 
 const baseEvent: Pick<
   EventConfig,
-  'startDate' | 'endDate' | 'resetTime' | 'lastResetDate' | 'status'
+  | 'startDate'
+  | 'endDate'
+  | 'resetMode'
+  | 'resetTime'
+  | 'lastResetDate'
+  | 'status'
+  | 'manualEndAt'
 > = {
   startDate: '2026-11-07',
   endDate: '2026-11-08',
+  resetMode: 'full-daily',
   resetTime: '00:00',
   lastResetDate: null,
   status: 'live',
+  manualEndAt: null,
 };
 
 // JST 2026-11-07 00:30 の Date（UTC では前日 15:30）
@@ -82,59 +92,155 @@ describe('isResetDue', () => {
       isResetDue({ ...baseEvent, status: 'draft' }, jst('2026-11-06T15:30:00Z')),
     ).toBe(false);
   });
+
+  it('リセットしない方式（none）は常に対象外', () => {
+    const none = { ...baseEvent, resetMode: 'none' as const };
+    expect(isResetDue(none, jst('2026-11-06T15:30:00Z'))).toBe(false);
+    expect(resetDateKeyFor(none, jst('2026-11-06T15:30:00Z'))).toBeNull();
+  });
+
+  it('手動終了を受け付けたイベントはリセット対象外（終了処理が優先）', () => {
+    const ending = { ...baseEvent, manualEndAt: '2026-11-07T01:00:00.000Z' };
+    expect(isResetDue(ending, jst('2026-11-06T15:30:00Z'))).toBe(false);
+    expect(resetDateKeyFor(ending, jst('2026-11-06T15:30:00Z'))).toBeNull();
+  });
+
+  it('通常日は対象日キーとして今日が返る', () => {
+    expect(resetDateKeyFor(baseEvent, jst('2026-11-06T15:30:00Z'))).toBe(
+      '2026-11-07',
+    );
+  });
 });
 
-describe('元日のリセットずらし（年始プッシュとの衝突回避）', () => {
-  const newYearEvent: typeof baseEvent = {
+describe('年越しリセットの前倒し（12月31日 21:00）', () => {
+  // 12月31日分まで実施済みのシーズンイベント
+  const seasonEvent: typeof baseEvent = {
     startDate: '2026-12-28',
     endDate: '2027-01-31',
+    resetMode: 'full-daily',
     resetTime: '00:00',
     lastResetDate: '2026-12-31',
     status: 'live',
+    manualEndAt: null,
   };
 
-  it('effectiveResetTime: 元日は 04:00 未満の設定を 04:00 にずらす', () => {
-    expect(effectiveResetTime('00:00', '2027-01-01')).toBe('04:00');
-    expect(effectiveResetTime('03:59', '2027-01-01')).toBe('04:00');
-    expect(effectiveResetTime('04:00', '2027-01-01')).toBe('04:00');
-    expect(effectiveResetTime('05:30', '2027-01-01')).toBe('05:30');
+  it('前倒し時刻は 21:00', () => {
+    expect(NEW_YEAR_EARLY_RESET_TIME).toBe('21:00');
   });
 
-  it('effectiveResetTime: 元日以外は設定どおり', () => {
-    expect(effectiveResetTime('00:00', '2026-12-31')).toBe('00:00');
-    expect(effectiveResetTime('00:00', '2027-01-02')).toBe('00:00');
-    expect(effectiveResetTime('00:00', '2027-02-01')).toBe('00:00');
+  it('12月31日 20:59 では前倒し分は due でない', () => {
+    // JST 2026-12-31 20:59 = UTC 11:59
+    const now = jst('2026-12-31T11:59:00Z');
+    expect(resetDateKeyFor(seasonEvent, now)).toBeNull();
+    expect(isResetDue(seasonEvent, now)).toBe(false);
   });
 
-  it('元日 0:00〜3:59 は not due（年始プッシュと重ねない）', () => {
+  it('12月31日 21:00 で due になり、対象日は翌年の1月1日', () => {
+    // JST 2026-12-31 21:00 = UTC 12:00
+    const now = jst('2026-12-31T12:00:00Z');
+    expect(resetDateKeyFor(seasonEvent, now)).toBe('2027-01-01');
+    expect(isResetDue(seasonEvent, now)).toBe(true);
+  });
+
+  it('12月31日分が未実施でも、前倒し時刻以降は1月1日分が優先される', () => {
+    const pending = { ...seasonEvent, lastResetDate: '2026-12-30' };
+    // JST 2026-12-31 21:00
+    expect(resetDateKeyFor(pending, jst('2026-12-31T12:00:00Z'))).toBe(
+      '2027-01-01',
+    );
+    // 前倒し時刻より前なら通常どおり12月31日分が対象
+    // JST 2026-12-31 00:30 = UTC 2026-12-30 15:30
+    expect(resetDateKeyFor(pending, jst('2026-12-30T15:30:00Z'))).toBe(
+      '2026-12-31',
+    );
+  });
+
+  it('前倒し実行後（lastResetDate が1月1日）は元日 0:00 でも 4:00 でも due でない', () => {
+    const done = { ...seasonEvent, lastResetDate: '2027-01-01' };
     // JST 2027-01-01 00:30
-    expect(isResetDue(newYearEvent, jst('2026-12-31T15:30:00Z'))).toBe(false);
-    // JST 2027-01-01 03:59
-    expect(isResetDue(newYearEvent, jst('2026-12-31T18:59:00Z'))).toBe(false);
-  });
-
-  it('元日 4:00 に due になる（スキップせず同日中に実施）', () => {
+    expect(isResetDue(done, jst('2026-12-31T15:30:00Z'))).toBe(false);
     // JST 2027-01-01 04:00
-    expect(isResetDue(newYearEvent, jst('2026-12-31T19:00:00Z'))).toBe(true);
+    expect(isResetDue(done, jst('2026-12-31T19:00:00Z'))).toBe(false);
+    expect(resetDateKeyFor(done, jst('2026-12-31T19:00:00Z'))).toBeNull();
   });
 
-  it('1月2日は通常の 0:00 に戻る', () => {
-    const jan2 = { ...newYearEvent, lastResetDate: '2027-01-01' };
-    // JST 2027-01-02 00:30
-    expect(isResetDue(jan2, jst('2027-01-01T15:30:00Z'))).toBe(true);
+  it('前倒しが走らなかった場合は、元日に通常どおり resetTime で due（時刻の下限ずらしは無い）', () => {
+    // lastResetDate は12月31日のまま。元日 00:30（resetTime 00:00 を過ぎた）で due
+    expect(resetDateKeyFor(seasonEvent, jst('2026-12-31T15:30:00Z'))).toBe(
+      '2027-01-01',
+    );
+    expect(isResetDue(seasonEvent, jst('2026-12-31T15:30:00Z'))).toBe(true);
   });
 
-  it('元日でも設定が 04:00 以降なら設定どおり', () => {
-    const late = { ...newYearEvent, resetTime: '05:00' };
+  it('元日も resetTime の設定どおりに判定する', () => {
+    const late = { ...seasonEvent, resetTime: '05:00' };
     // JST 2027-01-01 04:30 → まだ
     expect(isResetDue(late, jst('2026-12-31T19:30:00Z'))).toBe(false);
     // JST 2027-01-01 05:00 → due
     expect(isResetDue(late, jst('2026-12-31T20:00:00Z'))).toBe(true);
   });
+
+  it('1月1日分のデータは1月2日の resetTime に通常 due', () => {
+    const jan1Done = { ...seasonEvent, lastResetDate: '2027-01-01' };
+    // JST 2027-01-02 00:30
+    expect(resetDateKeyFor(jan1Done, jst('2027-01-01T15:30:00Z'))).toBe(
+      '2027-01-02',
+    );
+    expect(isResetDue(jan1Done, jst('2027-01-01T15:30:00Z'))).toBe(true);
+  });
+
+  it('リセットしない方式（none）では前倒しも due でない', () => {
+    const none = { ...seasonEvent, resetMode: 'none' as const };
+    // JST 2026-12-31 21:00
+    expect(resetDateKeyFor(none, jst('2026-12-31T12:00:00Z'))).toBeNull();
+    expect(isResetDue(none, jst('2026-12-31T12:00:00Z'))).toBe(false);
+  });
+
+  it('手動終了を受け付けたイベントでは前倒しも due でない', () => {
+    const ending = {
+      ...seasonEvent,
+      manualEndAt: '2026-12-31T10:00:00.000Z',
+    };
+    // JST 2026-12-31 21:00
+    expect(resetDateKeyFor(ending, jst('2026-12-31T12:00:00Z'))).toBeNull();
+    expect(isResetDue(ending, jst('2026-12-31T12:00:00Z'))).toBe(false);
+  });
+
+  it('1月1日が開催期間外（endDate が12月31日）なら前倒しせず、通常分が対象', () => {
+    const endsDec31 = {
+      ...seasonEvent,
+      endDate: '2026-12-31',
+      lastResetDate: '2026-12-30',
+    };
+    // JST 2026-12-31 21:00 → 対象は12月31日分
+    expect(resetDateKeyFor(endsDec31, jst('2026-12-31T12:00:00Z'))).toBe(
+      '2026-12-31',
+    );
+  });
+});
+
+describe('seasonEndDateFor（終了日未定の保存値）', () => {
+  it('12月開始は翌年の1月31日', () => {
+    expect(seasonEndDateFor('2026-12-01')).toBe('2027-01-31');
+    expect(seasonEndDateFor('2026-12-31')).toBe('2027-01-31');
+  });
+
+  it('1月開始はその年の1月31日', () => {
+    expect(seasonEndDateFor('2027-01-01')).toBe('2027-01-31');
+    expect(seasonEndDateFor('2027-01-15')).toBe('2027-01-31');
+  });
+
+  it('シーズン外はその年の1月31日に倒す（安全側）', () => {
+    expect(seasonEndDateFor('2026-11-20')).toBe('2026-01-31');
+  });
 });
 
 describe('isFinalizationDue', () => {
-  const fin = { endDate: '2026-11-08', finalizedAt: null as string | null };
+  const fin = {
+    endDate: '2026-11-08',
+    finalizedAt: null as string | null,
+    manualEndAt: null as string | null,
+  };
   it('終了日の翌日以降で due', () => {
     // JST 2026-11-09
     expect(isFinalizationDue(fin, jst('2026-11-08T15:00:00Z'))).toBe(true);
@@ -150,6 +256,21 @@ describe('isFinalizationDue', () => {
         jst('2026-11-08T15:00:00Z'),
       ),
     ).toBe(false);
+  });
+  it('手動終了を受け付けたら、終了日前でも due', () => {
+    const manual = { ...fin, manualEndAt: '2026-11-07T01:00:00.000Z' };
+    // JST 2026-11-07（開催期間中）
+    expect(isFinalizationDue(manual, jst('2026-11-06T15:00:00Z'))).toBe(true);
+  });
+  it('手動終了を受け付けていても finalized 済みなら not due', () => {
+    const manualDone = {
+      ...fin,
+      manualEndAt: '2026-11-07T01:00:00.000Z',
+      finalizedAt: '2026-11-07T02:00:00.000Z',
+    };
+    expect(isFinalizationDue(manualDone, jst('2026-11-06T15:00:00Z'))).toBe(
+      false,
+    );
   });
 });
 

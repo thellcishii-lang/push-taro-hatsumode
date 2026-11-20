@@ -7,6 +7,7 @@ const baseEvent = {
   status: 'live' as const,
   startDate: '2026-11-07',
   endDate: '2026-11-09',
+  manualEndAt: null as string | null,
 };
 
 describe('memberIdForDevice', () => {
@@ -40,6 +41,14 @@ describe('evaluateRegistration', () => {
   it('終了後は登録できない', () => {
     expect(evaluateRegistration(baseEvent, '2026-11-10'))
       .toEqual({ allowed: false, reason: 'after-period' });
+  });
+  it('手動終了を受け付けたイベントは期間内でも登録できない', () => {
+    expect(
+      evaluateRegistration(
+        { ...baseEvent, manualEndAt: '2026-11-08T01:00:00.000Z' },
+        '2026-11-08',
+      ),
+    ).toEqual({ allowed: false, reason: 'after-period' });
   });
   it('登録可否に登録者数の入力自体が無い（初詣は登録上限なし）', () => {
     // 契約枠（subscriberCap）は料金段階のデータとして保持するだけで、

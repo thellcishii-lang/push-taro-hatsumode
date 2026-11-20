@@ -22,6 +22,7 @@ import {
   EventSubcollection,
   jstDateString,
   localeTopic,
+  resetDateKeyFor,
 } from './event';
 import { normalizeLocale, type Locale } from './i18n';
 import { updateEvent } from './event-store';
@@ -53,6 +54,9 @@ export function resetTargets(
 ): EventSubcollection[] {
   if (kind === 'finalize') return [...ALL_SUBCOLLECTIONS];
   // 日次リセット
+  // none: 日次リセットはしない（isResetDue が常に false になるのが本線で、
+  // ここは直接呼ばれた場合の防御）。消去は終了処理でのみ行う。
+  if (mode === 'none') return [];
   if (mode === 'full-daily') return [...ALL_SUBCOLLECTIONS];
   // keep-phones: 端末情報と取得・消込記録は期間中保持し、購読だけ毎日リセット
   return [EVENT_SUBCOLLECTIONS.subscribers];
@@ -258,18 +262,22 @@ async function executeClear(
  * 消す前に必ず、その時点の件数を日次スナップショットとして保存する。
  * スナップショットに失敗したら例外となり、削除は一切実行されない
  * （呼び出し側が記録し、次の tick で再試行する。消去より保全を優先）。
- * 完了した場合のみ lastResetDate を今日に進める
+ * 完了した場合のみ lastResetDate を対象日（resetDateKeyFor）に進める
  * （未完了なら isResetDue が true のまま残り、次の tick で継続される）。
+ * 年越しの前倒し実行（12月31日 21:00）では対象日が翌1月1日になるため、
+ * lastResetDate には 1月1日が記録され、元日当日の二重実行を防ぐ。
+ * スナップショットは従来どおり実行時点の日付で取る。
  */
 export async function executeEventReset(
   event: EventConfig,
   now: Date,
   budget: number = resolveDeleteBudget(),
 ): Promise<EventResetResult> {
+  const dateKey = resetDateKeyFor(event, now) ?? jstDateString(now);
   await snapshotDailyStats(event, now);
   const result = await executeClear(event, 'daily', budget);
   if (result.completed) {
-    await updateEvent(event.id, { lastResetDate: jstDateString(now) });
+    await updateEvent(event.id, { lastResetDate: dateKey });
   }
   return result;
 }

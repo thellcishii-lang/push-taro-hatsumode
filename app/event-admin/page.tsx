@@ -69,6 +69,7 @@ interface EventForm {
   name: string;
   startDate: string;
   endDate: string;
+  endDateUndecided: boolean;
   resetMode: EventResetMode;
   resetTime: string;
   defaultLocale: Locale;
@@ -82,6 +83,7 @@ const emptyForm: EventForm = {
   name: '',
   startDate: '',
   endDate: '',
+  endDateUndecided: false,
   resetMode: 'full-daily',
   resetTime: '00:00',
   defaultLocale: 'ja',
@@ -96,6 +98,7 @@ function toForm(event: EventConfig): EventForm {
     name: event.name,
     startDate: event.startDate,
     endDate: event.endDate,
+    endDateUndecided: event.endDateUndecided,
     resetMode: event.resetMode,
     resetTime: event.resetTime,
     defaultLocale: event.defaultLocale,
@@ -261,6 +264,8 @@ export default function EventAdminPage() {
   const [formBusy, setFormBusy] = useState<null | 'save' | 'draft' | 'live'>(null);
   // 編集フォームの削除ボタンの処理中状態。
   const [cardBusy, setCardBusy] = useState<{ id: string; action: 'delete' } | null>(null);
+  // 編集フォームの「イベントを終了する」ボタンの処理中状態。
+  const [endBusy, setEndBusy] = useState(false);
   // 初回パスワード変更ゲートの状態（unknown の間は管理画面を出さない）。
   const [passwordGate, setPasswordGate] = useState<'unknown' | 'required' | 'clear'>('unknown');
   const [newPassword, setNewPassword] = useState('');
@@ -410,6 +415,7 @@ export default function EventAdminPage() {
     name: form.name,
     startDate: form.startDate,
     endDate: form.endDate,
+    endDateUndecided: form.endDateUndecided,
     resetMode: form.resetMode,
     resetTime: form.resetTime,
     defaultLocale: form.defaultLocale,
@@ -455,6 +461,24 @@ export default function EventAdminPage() {
       setMessage(e instanceof Error ? e.message : adminText(locale, 'saveFailed'));
     } finally {
       setFormBusy(null);
+    }
+  };
+
+  // 開催中イベントの手動終了（編集フォームのボタンから）。
+  // 受付（manualEndAt の記録）だけをここで行い、実際の終了処理
+  // （レポート送信とデータ消去）は次回のスケジューラ実行に委ねる。
+  const handleEndEvent = async (event: EventConfig) => {
+    if (!window.confirm(adminText(locale, 'endEventConfirm', { name: event.name }))) return;
+    setEndBusy(true);
+    setMessage('');
+    try {
+      await callApi(`/api/admin/events/${event.id}/end`, { method: 'POST' });
+      setMessage(adminText(locale, 'endEventRequested'));
+      await loadEvents();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : adminText(locale, 'endEventFailed'));
+    } finally {
+      setEndBusy(false);
     }
   };
 
@@ -712,11 +736,17 @@ export default function EventAdminPage() {
                   <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
                     {adminText(locale, 'eventMeta', {
                       start: event.startDate,
-                      end: event.endDate,
+                      end: event.endDateUndecided
+                        ? adminText(locale, 'endDateUndecidedShort')
+                        : event.endDate,
                       status: statusText(event.status),
                       mode: adminText(
                         locale,
-                        event.resetMode === 'full-daily' ? 'resetModeFullShort' : 'resetModeKeepShort',
+                        event.resetMode === 'full-daily'
+                          ? 'resetModeFullShort'
+                          : event.resetMode === 'keep-phones'
+                            ? 'resetModeKeepShort'
+                            : 'resetModeNoneShort',
                       ),
                       time: event.resetTime,
                     })}
@@ -847,8 +877,18 @@ export default function EventAdminPage() {
         </label>
         <label style={labelStyle}>
           {adminText(locale, 'endDateLabel')}
-          <input style={inputStyle} type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+          <input style={inputStyle} type="date" value={form.endDate} disabled={form.endDateUndecided} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
         </label>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600 }}>
+            <input
+              type="checkbox"
+              checked={form.endDateUndecided}
+              onChange={(e) => setForm({ ...form, endDateUndecided: e.target.checked })}
+            />{' '}
+            {adminText(locale, 'endDateUndecidedLabel')}
+          </label>
+        </div>
         <fieldset style={{ border: '1px solid #E7E3F4', borderRadius: 12, padding: '12px 14px', margin: '0 0 12px', backgroundColor: '#F7F5FD' }}>
           <legend style={{ fontSize: 13, fontWeight: 600 }}>{adminText(locale, 'resetModeLegend')}</legend>
           <label style={{ display: 'block', fontSize: 14, marginBottom: 6 }}>
@@ -860,7 +900,7 @@ export default function EventAdminPage() {
             />{' '}
             {adminText(locale, 'resetModeFull')}
           </label>
-          <label style={{ display: 'block', fontSize: 14 }}>
+          <label style={{ display: 'block', fontSize: 14, marginBottom: 6 }}>
             <input
               type="radio"
               name="resetMode"
@@ -869,10 +909,19 @@ export default function EventAdminPage() {
             />{' '}
             {adminText(locale, 'resetModeKeep')}
           </label>
+          <label style={{ display: 'block', fontSize: 14 }}>
+            <input
+              type="radio"
+              name="resetMode"
+              checked={form.resetMode === 'none'}
+              onChange={() => setForm({ ...form, resetMode: 'none' })}
+            />{' '}
+            {adminText(locale, 'resetModeNone')}
+          </label>
         </fieldset>
         <label style={labelStyle}>
           {adminText(locale, 'resetTimeLabel')}
-          <input style={inputStyle} type="time" value={form.resetTime} onChange={(e) => setForm({ ...form, resetTime: e.target.value })} />
+          <input style={inputStyle} type="time" value={form.resetTime} disabled={form.resetMode === 'none'} onChange={(e) => setForm({ ...form, resetTime: e.target.value })} />
         </label>
         <label style={labelStyle}>
           {adminText(locale, 'defaultLocaleLabel')}
@@ -933,6 +982,11 @@ export default function EventAdminPage() {
             </select>
           </label>
         )}
+        {selected?.manualEndAt && (
+          <p style={{ ...noticeStyle, marginBottom: 14 }}>
+            {adminText(locale, 'manualEndRequestedNote')}
+          </p>
+        )}
         {selected ? (
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
             <button
@@ -945,6 +999,23 @@ export default function EventAdminPage() {
                 {adminText(locale, 'saveButton')}
               </span>
             </button>
+            {selected.status === 'live' && !selected.manualEndAt && (
+              <button
+                type="button"
+                onClick={() => void handleEndEvent(selected)}
+                disabled={endBusy}
+                style={{
+                  ...secondaryButtonStyle,
+                  border: '1.5px solid #F3B4B4',
+                  color: '#B91C1C',
+                }}
+              >
+                <span style={adminButtonContentStyle}>
+                  {endBusy && <ButtonSpinner />}
+                  {adminText(locale, 'endEventButton')}
+                </span>
+              </button>
+            )}
             {(selected.status === 'draft' || selected.status === 'ended') && (
               <button
                 type="button"

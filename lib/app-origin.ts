@@ -7,12 +7,12 @@
 // ため APP_ORIGIN / resolveAppOrigin を re-export している。
 
 /**
- * 本番の App Hosting origin（本家側 lib/event-provisioning.ts の定数と同じ値）。
+ * 本番の App Hosting origin（初詣アプリ自身の URL）。
  * 将来の独自ドメイン化に備え、環境変数 NEXT_PUBLIC_APP_ORIGIN があれば
  * そちらを優先する（末尾のスラッシュは取り除く）。
  */
 export const APP_ORIGIN =
-  'https://push-taro-event--push-taro-event.asia-east1.hosted.app';
+  'https://push-taro-hatsumode--push-taro-hatsumode.asia-east1.hosted.app';
 
 export function resolveAppOrigin(): string {
   const fromEnv = process.env.NEXT_PUBLIC_APP_ORIGIN?.trim();

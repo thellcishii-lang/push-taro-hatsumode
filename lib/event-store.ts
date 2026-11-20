@@ -20,6 +20,7 @@ import {
   normalizeEventLinks,
   parseEventLinks,
   receivesCapsPropagation,
+  seasonEndDateFor,
 } from './event';
 
 const EVENTS_COLLECTION = 'events';
@@ -36,6 +37,8 @@ function toEventConfig(id: string, data: FirebaseFirestore.DocumentData): EventC
     ownerUid: data.ownerUid,
     startDate: data.startDate,
     endDate: data.endDate,
+    // 終了日「未定」は導入前のイベントには項目自体が無いため false に倒す
+    endDateUndecided: data.endDateUndecided === true,
     resetMode: data.resetMode,
     resetTime: data.resetTime,
     subscriberCap: data.subscriberCap,
@@ -48,6 +51,7 @@ function toEventConfig(id: string, data: FirebaseFirestore.DocumentData): EventC
     backupRetentionDays: data.backupRetentionDays ?? DEFAULT_BACKUP_RETENTION_DAYS,
     status: data.status,
     lastResetDate: data.lastResetDate ?? null,
+    manualEndAt: data.manualEndAt ?? null,
     finalizedAt: data.finalizedAt ?? null,
     createdAt: data.createdAt?.toDate?.().toISOString() ?? '',
     updatedAt: data.updatedAt?.toDate?.().toISOString() ?? '',
@@ -55,7 +59,13 @@ function toEventConfig(id: string, data: FirebaseFirestore.DocumentData): EventC
 }
 
 export async function createEvent(input: CreateEventInput): Promise<EventConfig> {
-  if (input.endDate < input.startDate) {
+  // 終了日「未定」のときは、保存する終了日をシーズン終了日（1月31日）に
+  // 置き換え、開始日との前後検証は行わない（シーズン終了日は常に開始日以降）。
+  const endDateUndecided = input.endDateUndecided === true;
+  const endDate = endDateUndecided
+    ? seasonEndDateFor(input.startDate)
+    : input.endDate;
+  if (!endDateUndecided && endDate < input.startDate) {
     throw new Error('終了日は開始日以降を指定してください');
   }
   const resetTime = input.resetTime ?? DEFAULT_RESET_TIME;
@@ -71,7 +81,8 @@ export async function createEvent(input: CreateEventInput): Promise<EventConfig>
     name: input.name,
     ownerUid: input.ownerUid,
     startDate: input.startDate,
-    endDate: input.endDate,
+    endDate,
+    endDateUndecided,
     resetMode: input.resetMode ?? DEFAULT_RESET_MODE,
     resetTime,
     subscriberCap: input.subscriberCap ?? DEFAULT_SUBSCRIBER_CAP,
@@ -83,6 +94,7 @@ export async function createEvent(input: CreateEventInput): Promise<EventConfig>
       input.backupRetentionDays ?? DEFAULT_BACKUP_RETENTION_DAYS,
     status: input.status ?? 'draft',
     lastResetDate: null,
+    manualEndAt: null,
     finalizedAt: null,
   };
   await ref.set({
@@ -231,6 +243,7 @@ export type UpdateEventInput = Partial<
     | 'name'
     | 'startDate'
     | 'endDate'
+    | 'endDateUndecided'
     | 'resetMode'
     | 'resetTime'
     | 'subscriberCap'
@@ -241,6 +254,7 @@ export type UpdateEventInput = Partial<
     | 'backupRetentionDays'
     | 'status'
     | 'lastResetDate'
+    | 'manualEndAt'
     | 'finalizedAt'
   >
 >;
@@ -261,12 +275,26 @@ export async function updateEvent(
   ) {
     throw new Error('入場用QR設定の形式が不正です');
   }
+  if (
+    patch.endDateUndecided !== undefined &&
+    typeof patch.endDateUndecided !== 'boolean'
+  ) {
+    throw new Error('終了日未定フラグの形式が不正です');
+  }
+  if (
+    patch.manualEndAt !== undefined &&
+    patch.manualEndAt !== null &&
+    typeof patch.manualEndAt !== 'string'
+  ) {
+    throw new Error('手動終了日時の形式が不正です');
+  }
   // 主催者リンクは検証してから正規化した形で保存する
   const links =
     patch.links !== undefined ? normalizeEventLinks(patch.links) : undefined;
   if (
     patch.startDate !== undefined &&
     patch.endDate !== undefined &&
+    patch.endDateUndecided !== true &&
     patch.endDate < patch.startDate
   ) {
     throw new Error('終了日は開始日以降を指定してください');

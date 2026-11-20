@@ -4,6 +4,12 @@ import { APP_ORIGIN, eventVisitorUrl, resolveAppOrigin } from './app-origin';
 const EVENT_ID = 'evt_abc123';
 
 describe('来場者ページ URL', () => {
+  it('既定の origin は初詣アプリ自身の本番 URL（EVENT 側ではない）', () => {
+    expect(APP_ORIGIN).toBe(
+      'https://push-taro-hatsumode--push-taro-hatsumode.asia-east1.hosted.app',
+    );
+  });
+
   it('既定では本番 origin の /e/{eventId} になる', () => {
     expect(resolveAppOrigin()).toBe(APP_ORIGIN);
     expect(eventVisitorUrl(EVENT_ID)).toBe(`${APP_ORIGIN}/e/${EVENT_ID}`);

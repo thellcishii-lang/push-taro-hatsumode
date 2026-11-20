@@ -57,10 +57,16 @@ export async function POST(request: Request) {
   const name = typeof body.name === 'string' ? body.name.trim() : '';
   const startDate = typeof body.startDate === 'string' ? body.startDate : '';
   const endDate = typeof body.endDate === 'string' ? body.endDate : '';
+  // 終了日「未定」のときは終了日の入力自体を要求しない
+  // （保存値は createEvent 側でシーズン終了日に置き換わる）。
+  const endDateUndecided = body.endDateUndecided === true;
   if (!name) {
     return NextResponse.json({ error: 'イベント名が必要です' }, { status: 400 });
   }
-  if (!DATE_PATTERN.test(startDate) || !DATE_PATTERN.test(endDate)) {
+  if (
+    !DATE_PATTERN.test(startDate) ||
+    (!endDateUndecided && !DATE_PATTERN.test(endDate))
+  ) {
     return NextResponse.json(
       { error: '開催期間は YYYY-MM-DD 形式で指定してください' },
       { status: 400 },
@@ -90,6 +96,7 @@ export async function POST(request: Request) {
       ownerUid: uid,
       startDate,
       endDate,
+      endDateUndecided,
       status,
       resetMode: body.resetMode as EventResetMode | undefined,
       resetTime: body.resetTime as string | undefined,

@@ -14,7 +14,9 @@ export type EventResetMode =
   /** 方式A: 購読も端末情報も毎日消去する（単日イベント向け） */
   | 'full-daily'
   /** 方式B: 毎日リセットするのは購読のみ。端末情報と取得・消込記録は期間中保持し、終了時に消去する */
-  | 'keep-phones';
+  | 'keep-phones'
+  /** リセットしない: 日次リセットを行わない。登録・クーポン記録は期間中ずっと保持し、終了時に全て消去する */
+  | 'none';
 
 export type EventStatus = 'draft' | 'live' | 'ended';
 
@@ -39,6 +41,13 @@ export interface EventConfig {
   startDate: string;
   /** 開催終了日（JST, 'YYYY-MM-DD'）。この日を過ぎたら終了処理（登録情報消去）の対象 */
   endDate: string;
+  /**
+   * 終了日が「未定」かどうか。未定の場合、endDate にはシーズン終了日
+   * （1月31日。seasonEndDateFor で算出）が入っており、判定はその日付で
+   * 行い、表示上は「未定」として扱う。
+   * 導入前に作られたイベントには項目自体が無いため、読み取り時は false に倒す。
+   */
+  endDateUndecided: boolean;
   resetMode: EventResetMode;
   /** リセット時刻（JST, 'HH:MM'）。イベントごとに変更可能 */
   resetTime: string;
@@ -73,6 +82,12 @@ export interface EventConfig {
   status: EventStatus;
   /** 最後に日次リセットを実行した JST 日付（'YYYY-MM-DD'）。未実施なら null */
   lastResetDate: string | null;
+  /**
+   * 主催者が手動終了を受け付けた時刻（ISO文字列）。設定されると、次回の
+   * スケジューラ実行で終了処理（集計→消去）が日付に関係なく走る。
+   * 未受付なら null。
+   */
+  manualEndAt: string | null;
   /** 終了処理（登録情報消去まで）を完了したかどうか */
   finalizedAt: string | null;
   createdAt: string;
@@ -114,6 +129,11 @@ export interface CreateEventInput {
   ownerUid: string;
   startDate: string;
   endDate: string;
+  /**
+   * 終了日を「未定」にするかどうか。未定なら endDate の値は使わず、
+   * シーズン終了日（seasonEndDateFor）で置き換えて保存する。
+   */
+  endDateUndecided?: boolean;
   /** 作成時の状態。未指定は下書き。'ended' は作成時には指定できない。 */
   status?: 'draft' | 'live';
   resetMode?: EventResetMode;
@@ -213,41 +233,101 @@ export function parseEventLinks(value: unknown): EventLink[] {
 }
 
 /**
- * このイベントの「今日分」の日次リセットが実行すべき状態かどうか。
+ * 初詣シーズンの終了日（1月31日）を開始日から決める（純粋関数）。
+ * 終了日「未定」のイベントに保存する endDate の算出に使う。
+ * - 12月開始 → 翌年の1月31日（シーズンは年をまたぐ）
+ * - 1月開始 → その年の1月31日
+ * - それ以外（シーズン外は想定しない）→ 安全側にその年の1月31日へ倒す
+ */
+export function seasonEndDateFor(startDate: string): string {
+  const year = Number(startDate.slice(0, 4));
+  const month = Number(startDate.slice(5, 7));
+  const endYear = month === 12 ? year + 1 : year;
+  return `${endYear}-01-31`;
+}
+
+/**
+ * 年越しリセットの前倒し時刻（JST, 'HH:MM'）。
+ * 1月1日分のリセット（12月31日までの蓄積を消すもの）は元日未明ではなく、
+ * 12月31日のこの時刻に前倒しして実行する。年越しの参拝客が来る前に一度
+ * リセットしておき、この時刻以降の登録を元日分として保持するため。
+ */
+export const NEW_YEAR_EARLY_RESET_TIME = '21:00';
+
+/**
+ * いま実行すべき日次リセットの「対象日付キー」を返す（純粋関数）。
+ * 実行すべきでなければ null。isResetDue はこの関数の null 判定であり、
+ * 実行側（lib/event-reset.ts）は完了時にこの日付キーを lastResetDate へ書く。
  *
  * スケジューラ（15分間隔）が各イベントについて呼ぶ前提:
- * - 開催期間中（startDate <= 今日 <= endDate）であること
- * - 設定時刻を過ぎていること
- * - 今日分がまだ未実施（lastResetDate が今日でない）こと
+ * - 開催中（status が live）で、リセット方式が「リセットしない」以外、
+ *   手動終了の受付済みでないこと（手動終了時は終了処理が優先される）
+ * - 対象日の分がまだ未実施（lastResetDate が対象日でない）こと
+ *
+ * 通常は「今日」が対象日。ただし年越しだけ例外で、12月31日の
+ * NEW_YEAR_EARLY_RESET_TIME 以降は「翌年の1月1日」が対象日になる
+ * （前倒し実行）。前倒しが実行されると lastResetDate が 1月1日になるため
+ * 元日当日は二重に走らず、前倒しが走らなかった場合は元日に通常どおり
+ * resetTime で実行される（フォールバック）。1月1日分のデータの消去は
+ * 1月2日の resetTime に通常分として実行される。
  *
  * 冪等性は lastResetDate で担保する: 途中で失敗しても次の tick で再判定され、
  * 成功済みのイベントは二重にリセットされない。
  */
-/** 元日のリセット時刻の下限。年始プッシュ（0:00）と重ならないためのずらし幅。 */
-export const NEW_YEAR_RESET_FLOOR = '04:00';
+export function resetDateKeyFor(
+  event: Pick<
+    EventConfig,
+    | 'startDate'
+    | 'endDate'
+    | 'resetMode'
+    | 'resetTime'
+    | 'lastResetDate'
+    | 'status'
+    | 'manualEndAt'
+  >,
+  now: Date,
+): string | null {
+  if (event.status !== 'live') return null;
+  if (event.resetMode === 'none') return null;
+  if (event.manualEndAt) return null;
+  const today = jstDateString(now);
 
-/**
- * その日に実際に使うリセット時刻（純粋関数）。
- * 元日（1月1日）は 0:00 の年始プッシュと日次リセットが重ならないよう、
- * 設定時刻が 04:00 より早ければその日だけ 04:00 にずらす。
- * 翌日以降は通常の設定時刻に戻る（ずらしは元日限定で、スキップはしない）。
- */
-export function effectiveResetTime(resetTime: string, dateKey: string): string {
-  if (dateKey.slice(5) === '01-01' && resetTime < NEW_YEAR_RESET_FLOOR) {
-    return NEW_YEAR_RESET_FLOOR;
+  // 年越しの前倒し: 12月31日の前倒し時刻以降は、翌1月1日分を先に実行する。
+  // 12月31日分が未実施でも、消去自体は同じ蓄積を消すため前倒し分を優先する
+  // （lastResetDate は 1月1日になり、12月31日分は別途走らない）。
+  if (
+    today.slice(5) === '12-31' &&
+    today >= event.startDate &&
+    jstTimeString(now) >= NEW_YEAR_EARLY_RESET_TIME
+  ) {
+    const nextJan1 = `${Number(today.slice(0, 4)) + 1}-01-01`;
+    if (nextJan1 <= event.endDate && event.lastResetDate !== nextJan1) {
+      return nextJan1;
+    }
   }
-  return resetTime;
+
+  // 通常分: 開催期間内の今日が対象日で、設定時刻を過ぎていれば対象。
+  if (today < event.startDate || today > event.endDate) return null;
+  if (event.lastResetDate === today) return null;
+  if (jstTimeString(now) < event.resetTime) return null;
+  return today;
 }
 
+/** このイベントの日次リセットが実行すべき状態かどうか。 */
 export function isResetDue(
-  event: Pick<EventConfig, 'startDate' | 'endDate' | 'resetTime' | 'lastResetDate' | 'status'>,
+  event: Pick<
+    EventConfig,
+    | 'startDate'
+    | 'endDate'
+    | 'resetMode'
+    | 'resetTime'
+    | 'lastResetDate'
+    | 'status'
+    | 'manualEndAt'
+  >,
   now: Date,
 ): boolean {
-  if (event.status !== 'live') return false;
-  const today = jstDateString(now);
-  if (today < event.startDate || today > event.endDate) return false;
-  if (event.lastResetDate === today) return false;
-  return jstTimeString(now) >= effectiveResetTime(event.resetTime, today);
+  return resetDateKeyFor(event, now) !== null;
 }
 
 /** 同時イベント上限のカウント対象かどうか（終了したイベントは数えない）。 */
@@ -307,13 +387,15 @@ export function receivesCapsPropagation(
 /**
  * 終了処理（登録情報消去）の対象かどうか。
  * 終了日を過ぎていて、まだ finalized されていないイベントが対象。
+ * 主催者が手動終了を受け付けたイベントは、日付に関係なく対象になる。
  * リセットより優先される（終了後にリセットは走らない）。
  */
 export function isFinalizationDue(
-  event: Pick<EventConfig, 'endDate' | 'finalizedAt'>,
+  event: Pick<EventConfig, 'endDate' | 'finalizedAt' | 'manualEndAt'>,
   now: Date,
 ): boolean {
   if (event.finalizedAt) return false;
+  if (event.manualEndAt) return true;
   return jstDateString(now) > event.endDate;
 }
 

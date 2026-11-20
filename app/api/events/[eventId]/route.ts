@@ -12,7 +12,7 @@ import {
   updateEvent,
   UpdateEventInput,
 } from '@/lib/event-store';
-import { canDeleteEvent } from '@/lib/event';
+import { canDeleteEvent, seasonEndDateFor } from '@/lib/event';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,6 +41,8 @@ const EDITABLE_FIELDS: Array<keyof UpdateEventInput> = [
   'name',
   'startDate',
   'endDate',
+  // manualEndAt は含めない: 手動終了は専用API（/api/admin/events/[eventId]/end）でのみ受け付ける
+  'endDateUndecided',
   'resetMode',
   'resetTime',
   'defaultLocale',
@@ -82,6 +84,13 @@ export async function PATCH(
   const patch: Record<string, unknown> = {};
   for (const field of EDITABLE_FIELDS) {
     if (body[field] !== undefined) patch[field] = body[field];
+  }
+  // 終了日「未定」にするときは、保存する終了日を開始日から決まる
+  // シーズン終了日（1月31日）に寄せる（クライアントの終了日入力は使わない）。
+  if (patch.endDateUndecided === true) {
+    const startDate =
+      typeof patch.startDate === 'string' ? patch.startDate : event.startDate;
+    patch.endDate = seasonEndDateFor(startDate);
   }
   // status='ended' は終了処理（データ消去）経由でのみ遷移させる
   if (patch.status === 'ended') {

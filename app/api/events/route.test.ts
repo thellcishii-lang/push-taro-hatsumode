@@ -102,4 +102,26 @@ describe('POST /api/events', () => {
     expect(response.status).toBe(401);
     expect(mocks.createEvent).not.toHaveBeenCalled();
   });
+
+  it('終了日「未定」なら終了日なしでも作成でき、フラグが createEvent へ渡る', async () => {
+    const response = await POST(
+      postRequest({
+        name: 'テストイベント',
+        startDate: '2026-12-20',
+        endDateUndecided: true,
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect(mocks.createEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ endDateUndecided: true }),
+    );
+  });
+
+  it('終了日「未定」でなければ終了日の形式不正は 400 で作成しない', async () => {
+    const response = await POST(
+      postRequest({ name: 'テストイベント', startDate: '2026-12-20' }),
+    );
+    expect(response.status).toBe(400);
+    expect(mocks.createEvent).not.toHaveBeenCalled();
+  });
 });

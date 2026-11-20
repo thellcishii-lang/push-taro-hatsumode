@@ -8,20 +8,24 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   requireEventOwner: vi.fn(),
   deleteEventCompletely: vi.fn(),
+  getUidFromRequest: vi.fn(),
+  passwordChangeBlock: vi.fn(),
+  getEvent: vi.fn(),
+  updateEvent: vi.fn(),
 }));
 
 vi.mock('@/lib/event-auth', () => ({
-  getUidFromRequest: vi.fn(),
-  passwordChangeBlock: vi.fn(),
+  getUidFromRequest: mocks.getUidFromRequest,
+  passwordChangeBlock: mocks.passwordChangeBlock,
   requireEventOwner: mocks.requireEventOwner,
 }));
 vi.mock('@/lib/event-store', () => ({
-  getEvent: vi.fn(),
-  updateEvent: vi.fn(),
+  getEvent: mocks.getEvent,
+  updateEvent: mocks.updateEvent,
   deleteEventCompletely: mocks.deleteEventCompletely,
 }));
 
-import { DELETE } from './route';
+import { DELETE, PATCH } from './route';
 
 const EVENT_ID = 'event-1';
 
@@ -91,5 +95,55 @@ describe('DELETE /api/events/[eventId]', () => {
       params: Promise.resolve({ eventId: EVENT_ID }),
     });
     expect(response.status).toBe(500);
+  });
+});
+
+describe('PATCH /api/events/[eventId]（終了日「未定」）', () => {
+  const ownedEvent = {
+    id: EVENT_ID,
+    ownerUid: 'owner-1',
+    startDate: '2026-12-20',
+    endDate: '2026-12-31',
+    status: 'draft',
+    finalizedAt: null,
+  };
+
+  function patchRequest(body: Record<string, unknown>) {
+    return new Request(`http://localhost/api/events/${EVENT_ID}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  beforeEach(() => {
+    mocks.getUidFromRequest.mockResolvedValue('owner-1');
+    mocks.passwordChangeBlock.mockResolvedValue(null);
+    mocks.getEvent.mockResolvedValue(ownedEvent);
+    mocks.updateEvent.mockResolvedValue(undefined);
+  });
+
+  it('未定にすると終了日がシーズン終了日（翌年1月31日）に寄せられる', async () => {
+    // PATCH の戻り値型には既存実装の都合で undefined が含まれるため ?. で受ける
+    const response = await PATCH(patchRequest({ endDateUndecided: true }), {
+      params: Promise.resolve({ eventId: EVENT_ID }),
+    });
+    expect(response?.status).toBe(200);
+    expect(mocks.updateEvent).toHaveBeenCalledWith(
+      EVENT_ID,
+      expect.objectContaining({
+        endDateUndecided: true,
+        endDate: '2027-01-31',
+      }),
+    );
+  });
+
+  it('manualEndAt は PATCH では変更できない（変更項目なしとして 400）', async () => {
+    const response = await PATCH(
+      patchRequest({ manualEndAt: '2026-12-30T00:00:00.000Z' }),
+      { params: Promise.resolve({ eventId: EVENT_ID }) },
+    );
+    expect(response?.status).toBe(400);
+    expect(mocks.updateEvent).not.toHaveBeenCalled();
   });
 });
