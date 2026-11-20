@@ -33,6 +33,7 @@ import { buildCouponGroups } from '@/lib/coupon-groups';
 import { shouldShowNewYearGreeting } from '@/lib/new-year-greeting';
 import { NewYearSheepGreeting } from '@/components/NewYearSheepGreeting';
 import { OmikujiSection } from '@/components/OmikujiSection';
+import { GachaSection } from '@/components/GachaSection';
 import {
   VisitorSchedule,
   type VisitorScheduleEntry,
@@ -54,6 +55,10 @@ interface PublicEvent {
   defaultLocale: string;
   /** 入場用QRの取り込みが有効か（主催者設定。オフなら画面に何も出さない） */
   admissionQrEnabled: boolean;
+  /** おみくじを使うか（主催者設定。未指定の旧応答はオンとして扱う） */
+  omikujiEnabled?: boolean;
+  /** ガチャを使うか（主催者設定。オフなら画面に何も出さない） */
+  gachaEnabled?: boolean;
   /** 主催者リンク（最大3件）。未登録なら空で、画面に何も出さない */
   links?: PublicEventLink[];
 }
@@ -1161,7 +1166,13 @@ export default function EventVisitorPage() {
             </div>
           )}
 
-          <OmikujiSection eventId={eventId} locale={locale} user={user} />
+          {event.omikujiEnabled !== false && (
+            <OmikujiSection eventId={eventId} locale={locale} user={user} />
+          )}
+
+          {event.gachaEnabled && (
+            <GachaSection eventId={eventId} locale={locale} user={user} />
+          )}
 
           {myClaims.length > 0 && (
             <>

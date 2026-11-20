@@ -4,7 +4,8 @@
 // 干渉させないためのポイント:
 // - 日次リセットの削除対象は events/{eventId} 配下のサブコレクションだけ。他イベントには一切触れない。
 // - 終了処理（最終消去）では加えて、行事予定（schedule サブコレクション）と
-//   おみくじ抽選記録（トップレベルの omikujiDraws、そのイベント分だけ）も消す。
+//   おみくじ抽選記録（トップレベルの omikujiDraws、そのイベント分だけ）、
+//   ガチャ抽選記録と当選数カウンタ（gachaDraws / gachaPrizeCounts）も消す。
 //   どちらも日次リセットでは絶対に消さない: 行事予定は複数日にまたがり、
 //   抽選記録は「期間中1回だけ」を守る台帳だからである。
 // - 削除は小さなバッチで刻み、1回の実行には上限（予算）を設ける。
@@ -36,6 +37,10 @@ import { findOrganizerByOwnerUid } from './organizers';
 import { cancelEventSubscriptionsForFinalization } from './event-billing';
 import { SCHEDULE_SUBCOLLECTION } from './event-schedule';
 import { OMIKUJI_DRAWS_COLLECTION } from './event-omikuji';
+import {
+  GACHA_DRAWS_COLLECTION,
+  GACHA_PRIZE_COUNTS_COLLECTION,
+} from './event-gacha';
 
 export { EVENT_SUBCOLLECTIONS };
 export type { EventSubcollection };
@@ -183,6 +188,8 @@ export interface EventResetResult {
   deletedScheduleCount?: number;
   /** 終了処理で消したおみくじ抽選記録の件数（終了処理のときだけ）。 */
   deletedOmikujiDrawCount?: number;
+  /** 終了処理で消したガチャ抽選記録の件数（終了処理のときだけ）。 */
+  deletedGachaDrawCount?: number;
 }
 
 async function executeClear(
@@ -219,10 +226,13 @@ async function executeClear(
 
   // 終了処理の追加対象（日次リセットでは絶対に消さない）:
   // 行事予定（schedule サブコレクション）と、おみくじ抽選記録
-  // （トップレベルの omikujiDraws のうち、このイベント分だけ）。
+  // （トップレベルの omikujiDraws のうち、このイベント分だけ）、
+  // ガチャ抽選記録（gachaDraws のうち、このイベント分だけ）と
+  // 当選数カウンタ（gachaPrizeCounts のこのイベントのドキュメント）。
   // 予算が尽きていたら未完了として次の tick で続きを消す。
   let deletedScheduleCount = 0;
   let deletedOmikujiDrawCount = 0;
+  let deletedGachaDrawCount = 0;
   if (remainingBudget <= 0) {
     completed = false;
   } else {
@@ -243,7 +253,28 @@ async function executeClear(
       .where('eventId', '==', event.id);
     const drawsResult = await drainCollection(drawsQuery, remainingBudget);
     deletedOmikujiDrawCount = drawsResult.deleted;
+    remainingBudget -= drawsResult.deleted;
     if (drawsResult.exhausted) completed = false;
+  }
+  if (remainingBudget <= 0) {
+    completed = false;
+  } else {
+    const gachaQuery = db
+      .collection(GACHA_DRAWS_COLLECTION)
+      .where('eventId', '==', event.id);
+    const gachaResult = await drainCollection(gachaQuery, remainingBudget);
+    deletedGachaDrawCount = gachaResult.deleted;
+    if (gachaResult.exhausted) {
+      completed = false;
+    } else {
+      // 当選数カウンタはイベントに1ドキュメントだけ。抽選記録を消し
+      // 終えたときに合わせて消す（残すと次シーズンの同IDイベントに
+      // 数字が漏れるため、必ずセットで消す）。
+      await db
+        .collection(GACHA_PRIZE_COUNTS_COLLECTION)
+        .doc(event.id)
+        .delete();
+    }
   }
 
   return {
@@ -253,6 +284,7 @@ async function executeClear(
     deletedByCollection,
     deletedScheduleCount,
     deletedOmikujiDrawCount,
+    deletedGachaDrawCount,
   };
 }
 
@@ -291,7 +323,8 @@ export async function executeEventReset(
  *    tick の再送スイープと管理画面からの再送で何度でも送り直せる（削除はブロックしない）。
  * 4. 出店者課金オプションが有効なら、そのイベントの月額サブスクリプションを
  *    主催者の Stripe で自動解約する（ベストエフォート。失敗しても続行する）。
- * 5. 登録情報を含む全対象を削除する（行事予定とおみくじ抽選記録を含む）。
+ * 5. 登録情報を含む全対象を削除する（行事予定・おみくじ抽選記録・
+ *    ガチャ抽選記録と当選数カウンタを含む）。
  *    消し終えた場合のみ finalizedAt と status='ended' を記録する。
  * （リセットより優先して呼ばれる前提）
  */

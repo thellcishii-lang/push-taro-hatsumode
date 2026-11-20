@@ -47,6 +47,9 @@ const EDITABLE_FIELDS: Array<keyof UpdateEventInput> = [
   'resetTime',
   'defaultLocale',
   'admissionQrEnabled',
+  'omikujiEnabled',
+  'gachaEnabled',
+  'gachaPrizes',
   'links',
   // subscriberCap は含めない: 料金（契約枠）の軸のため、変更は運営側のみ
   // （/api/admin/events/[eventId]）。
