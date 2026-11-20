@@ -132,6 +132,27 @@ describe('終了日のシーズン上限（1月31日まで）', () => {
     expect(event.endDate).toBe('2027-01-31');
   });
 
+  it('作成: 11月開始でも翌年1月31日は通る', async () => {
+    const event = await createEvent({
+      name: 'テストイベント',
+      ownerUid: 'owner-1',
+      startDate: '2026-11-20',
+      endDate: '2027-01-31',
+    });
+    expect(event.endDate).toBe('2027-01-31');
+  });
+
+  it('作成: 11月開始で翌年2月1日は弾く', async () => {
+    await expect(
+      createEvent({
+        name: 'テストイベント',
+        ownerUid: 'owner-1',
+        startDate: '2026-11-20',
+        endDate: '2027-02-01',
+      }),
+    ).rejects.toThrow('終了日は1月31日までを指定してください');
+  });
+
   it('作成: 終了日「未定」なら上限チェックの対象外（保存値は1月31日になる）', async () => {
     const event = await createEvent({
       name: 'テストイベント',
@@ -156,6 +177,26 @@ describe('終了日のシーズン上限（1月31日まで）', () => {
   it('更新: 開始日がパッチに無くても保存済みの開始日を基準に弾く', async () => {
     await expect(
       updateEvent('ev-live', { endDate: '2027-02-15' }),
+    ).rejects.toThrow('終了日は1月31日までを指定してください');
+  });
+
+  it('更新: 11月開始でも翌年1月31日は通る', async () => {
+    await updateEvent('ev-live', {
+      startDate: '2026-11-20',
+      endDate: '2027-01-31',
+    });
+    const events = await listEventsByOwner('owner-1');
+    expect(events.find((event) => event.id === 'ev-live')?.endDate).toBe(
+      '2027-01-31',
+    );
+  });
+
+  it('更新: 11月開始で翌年2月1日は弾く', async () => {
+    await expect(
+      updateEvent('ev-live', {
+        startDate: '2026-11-20',
+        endDate: '2027-02-01',
+      }),
     ).rejects.toThrow('終了日は1月31日までを指定してください');
   });
 

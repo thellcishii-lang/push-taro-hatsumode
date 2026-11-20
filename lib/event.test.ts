@@ -227,11 +227,13 @@ describe('seasonEndDateFor（終了日未定の保存値）', () => {
 
   it('1月開始はその年の1月31日', () => {
     expect(seasonEndDateFor('2027-01-01')).toBe('2027-01-31');
+    expect(seasonEndDateFor('2027-01-10')).toBe('2027-01-31');
     expect(seasonEndDateFor('2027-01-15')).toBe('2027-01-31');
   });
 
-  it('シーズン外はその年の1月31日に倒す（安全側）', () => {
-    expect(seasonEndDateFor('2026-11-20')).toBe('2026-01-31');
+  it('11月など年内の開始も翌年の1月31日', () => {
+    expect(seasonEndDateFor('2026-11-20')).toBe('2027-01-31');
+    expect(seasonEndDateFor('2026-02-01')).toBe('2027-01-31');
   });
 });
 

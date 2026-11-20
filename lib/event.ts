@@ -234,15 +234,16 @@ export function parseEventLinks(value: unknown): EventLink[] {
 
 /**
  * 初詣シーズンの終了日（1月31日）を開始日から決める（純粋関数）。
- * 終了日「未定」のイベントに保存する endDate の算出に使う。
- * - 12月開始 → 翌年の1月31日（シーズンは年をまたぐ）
+ * 終了日「未定」のイベントに保存する endDate の算出と、終了日の
+ * シーズン上限チェックに使う。
  * - 1月開始 → その年の1月31日
- * - それ以外（シーズン外は想定しない）→ 安全側にその年の1月31日へ倒す
+ * - それ以外（2〜12月）→ 翌年の1月31日（シーズンは年をまたぐ。
+ *   11月など年内に準備を始めるイベントも、終了は翌年1月末）
  */
 export function seasonEndDateFor(startDate: string): string {
   const year = Number(startDate.slice(0, 4));
   const month = Number(startDate.slice(5, 7));
-  const endYear = month === 12 ? year + 1 : year;
+  const endYear = month === 1 ? year : year + 1;
   return `${endYear}-01-31`;
 }
 

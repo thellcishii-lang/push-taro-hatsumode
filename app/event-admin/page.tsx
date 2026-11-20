@@ -966,6 +966,9 @@ export default function EventAdminPage() {
         <label style={labelStyle}>
           {adminText(locale, 'resetTimeLabel')}
           <input style={inputStyle} type="time" value={form.resetTime} disabled={form.resetMode === 'none'} onChange={(e) => setForm({ ...form, resetTime: e.target.value })} />
+          <span style={{ fontSize: 12, color: '#64748b' }}>
+            {adminText(locale, 'resetTimeNote')}
+          </span>
         </label>
         <label style={labelStyle}>
           {adminText(locale, 'defaultLocaleLabel')}

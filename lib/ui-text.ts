@@ -259,6 +259,12 @@ export const UI_TEXT = {
     zh: '访客页面',
     ko: '방문객 페이지',
   },
+  refresh: {
+    ja: '更新',
+    en: 'Refresh',
+    zh: '刷新',
+    ko: '새로고침',
+  },
   claimedBadge: {
     ja: '取得済み・利用可',
     en: 'Claimed · Available',
@@ -1502,6 +1508,12 @@ export const ADMIN_TEXT = {
     en: 'Reset time (JST)',
     zh: '重置时间（JST）',
     ko: '리셋 시각(JST)',
+  },
+  resetTimeNote: {
+    ja: '※2026年12月31日は午後9時にリセットされます',
+    en: '* On December 31, 2026, the reset runs at 9:00 PM.',
+    zh: '※2026年12月31日将在晚上9点重置',
+    ko: '※2026년 12월 31일은 오후 9시에 리셋됩니다',
   },
   defaultLocaleLabel: {
     ja: 'デフォルト言語',
