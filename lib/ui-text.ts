@@ -1377,6 +1377,12 @@ export const ADMIN_TEXT = {
     zh: '活动期间保留设备信息',
     ko: '기간 중 단말기 정보 유지',
   },
+  resetModeNoneShort: {
+    ja: 'リセットしない',
+    en: 'No reset',
+    zh: '不重置',
+    ko: '리셋 없음',
+  },
   newEventButton: {
     ja: '＋ 新規イベント',
     en: '+ New event',
@@ -1449,6 +1455,18 @@ export const ADMIN_TEXT = {
     zh: '结束日期',
     ko: '종료일',
   },
+  endDateUndecidedLabel: {
+    ja: '終了日は未定にする',
+    en: 'Leave the end date undecided',
+    zh: '结束日期设为待定',
+    ko: '종료일을 미정으로 하기',
+  },
+  endDateUndecidedShort: {
+    ja: '未定（1月31日まで）',
+    en: 'Undecided (until Jan 31)',
+    zh: '待定（至1月31日）',
+    ko: '미정(1월 31일까지)',
+  },
   resetModeLegend: {
     ja: '日次リセット方式',
     en: 'Daily reset mode',
@@ -1466,6 +1484,12 @@ export const ADMIN_TEXT = {
     en: 'Keep during the event (daily reset clears subscriptions only; device records and claim/redemption records are deleted at the end)',
     zh: '活动期间保留（每日重置仅清除订阅；设备信息及领取、核销记录在结束时删除）',
     ko: '기간 중 유지(매일 리셋은 구독만 삭제. 단말기 정보와 취득·사용 기록은 종료 시 삭제)',
+  },
+  resetModeNone: {
+    ja: 'リセットしない（登録・クーポン記録は期間中ずっと残り、終了時に消去）',
+    en: 'No daily reset (registrations and coupon records are kept for the whole period and deleted at the end)',
+    zh: '不进行每日重置（注册与优惠券记录在活动期间保留，结束时删除）',
+    ko: '리셋하지 않음(등록·쿠폰 기록은 기간 중 유지되고 종료 시 삭제)',
   },
   resetTimeLabel: {
     ja: 'リセット時刻（JST）',
@@ -1628,6 +1652,36 @@ export const ADMIN_TEXT = {
     en: 'Event deleted',
     zh: '活动已删除',
     ko: '이벤트를 삭제했습니다',
+  },
+  endEventButton: {
+    ja: 'イベントを終了する',
+    en: 'End this event',
+    zh: '结束活动',
+    ko: '이벤트 종료하기',
+  },
+  endEventConfirm: {
+    ja: 'イベント「{name}」を終了しますか？\n次回の自動処理（15分以内）で終了処理が実行され、集計レポートが送信され、参拝者の登録情報・クーポン記録がすべて消去されます。この操作は取り消せません。',
+    en: 'End the event "{name}"?\nAt the next scheduled run (within 15 minutes), the summary report will be sent and all visitor registrations and coupon records will be deleted. This cannot be undone.',
+    zh: '要结束活动“{name}”吗？\n下一次自动处理（15分钟内）将发送汇总报告，并删除所有访客注册信息和优惠券记录。此操作无法撤销。',
+    ko: '이벤트 "{name}"을(를) 종료하시겠습니까?\n다음 자동 처리(15분 이내)에 집계 보고서가 전송되고 방문자 등록 정보와 쿠폰 기록이 모두 삭제됩니다. 이 작업은 취소할 수 없습니다.',
+  },
+  endEventRequested: {
+    ja: '終了を受け付けました。終了処理は次回の自動処理で実行されます。',
+    en: 'End request accepted. Finalization will run at the next scheduled run.',
+    zh: '已接受结束请求。结束处理将在下一次自动处理时执行。',
+    ko: '종료가 접수되었습니다. 종료 처리는 다음 자동 처리에서 실행됩니다.',
+  },
+  endEventFailed: {
+    ja: '終了の受付に失敗しました',
+    en: 'Failed to request the end',
+    zh: '结束请求失败',
+    ko: '종료 접수에 실패했습니다',
+  },
+  manualEndRequestedNote: {
+    ja: '終了受付済みです。終了処理（集計レポートの送信とデータ消去）が次回の自動処理で実行されます。',
+    en: 'End requested. Finalization (summary report and data deletion) will run at the next scheduled run.',
+    zh: '已接受结束。结束处理（汇总报告发送与数据删除）将在下一次自动处理时执行。',
+    ko: '종료 접수 완료. 종료 처리(집계 보고서 전송 및 데이터 삭제)가 다음 자동 처리에서 실행됩니다.',
   },
   deleteFailed: {
     ja: '削除に失敗しました',

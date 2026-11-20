@@ -30,6 +30,6 @@ describe('resolveStorageBucket', () => {
 
   it('falls back to the project default bucket', () => {
     expect(resolveStorageBucket({})).toBe(DEFAULT_STORAGE_BUCKET);
-    expect(DEFAULT_STORAGE_BUCKET).toBe('push-taro-event.firebasestorage.app');
+    expect(DEFAULT_STORAGE_BUCKET).toBe('push-taro-hatsumode.firebasestorage.app');
   });
 });

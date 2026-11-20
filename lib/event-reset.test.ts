@@ -23,6 +23,10 @@ describe('resetTargets', () => {
     ]);
   });
 
+  it('リセットしない方式（none）の日次リセットは対象が無い（消去は終了処理でのみ）', () => {
+    expect(resetTargets('none', 'daily')).toEqual([]);
+  });
+
   it('終了処理は方式によらず全サブコレクションを消す（登録情報消去）', () => {
     const all = [
       EVENT_SUBCOLLECTIONS.subscribers,
@@ -32,6 +36,7 @@ describe('resetTargets', () => {
     ];
     expect(resetTargets('full-daily', 'finalize')).toEqual(all);
     expect(resetTargets('keep-phones', 'finalize')).toEqual(all);
+    expect(resetTargets('none', 'finalize')).toEqual(all);
   });
 });
 

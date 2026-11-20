@@ -9,7 +9,7 @@
 // （クライアント設定と同じ公開識別子）。最終フォールバックはこの
 // プロジェクトの既定バケット。
 
-export const DEFAULT_STORAGE_BUCKET = 'push-taro-event.firebasestorage.app';
+export const DEFAULT_STORAGE_BUCKET = 'push-taro-hatsumode.firebasestorage.app';
 
 export function resolveStorageBucket(
   env: Record<string, string | undefined>,

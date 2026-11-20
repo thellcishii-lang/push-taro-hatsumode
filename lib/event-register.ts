@@ -34,12 +34,14 @@ export type RegistrationDecision =
  * 登録可否の判定（純粋関数）。
  * 状態が live で、開催期間内（JST の今日が startDate〜endDate）のときだけ
  * 登録できる。登録者数の上限では止めない（初詣は上限なし）。
+ * 手動終了を受け付けたイベントは、期間内でも新規登録を受け付けない。
  */
 export function evaluateRegistration(
-  event: Pick<EventConfig, 'status' | 'startDate' | 'endDate'>,
+  event: Pick<EventConfig, 'status' | 'startDate' | 'endDate' | 'manualEndAt'>,
   today: string,
 ): RegistrationDecision {
   if (event.status !== 'live') return { allowed: false, reason: 'not-live' };
+  if (event.manualEndAt) return { allowed: false, reason: 'after-period' };
   if (today < event.startDate) return { allowed: false, reason: 'before-period' };
   if (today > event.endDate) return { allowed: false, reason: 'after-period' };
   return { allowed: true };
