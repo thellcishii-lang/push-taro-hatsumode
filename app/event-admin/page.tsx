@@ -11,6 +11,10 @@
 // 編集はカードの「イベント編集」ボタンで選択してフォームへスクロール。
 // 公開（開催中にする）は編集フォームの状態変更から、削除は編集フォームから
 // できる（下書き・終了のみ。削除は DELETE /api/events/[eventId]）。
+// 編集モードからはフォーム見出しの「新規イベントを追加」で新規作成に戻れる。
+// 終了受付済み（manualEndAt）のイベントはカードで「終了処理中」と表示し、
+// 同時作成枠にも数えない（判定は lib/event.ts の countsTowardConcurrentCap）。
+// 終了済みのイベントは一覧に出ない（GET /api/events 側で除外）。
 // 契約まわりの導線として、一覧の上にプラン変更を置く
 // （本家の EVENT 専用契約ページへのリンク）。
 // 将来の管理画面3分割（プッシュ＋消込／予約／クーポン管理）の土台として、
@@ -60,6 +64,8 @@ import {
   MAX_CONCURRENT_EVENTS,
   canCreateAnotherEvent,
   countConcurrentEvents,
+  jstDateString,
+  seasonEndDateFor,
   subscriberUsage,
 } from '@/lib/event';
 import { LOCALE_LABELS, SUPPORTED_LOCALES, Locale } from '@/lib/i18n';
@@ -464,6 +470,15 @@ export default function EventAdminPage() {
     }
   };
 
+  // 編集モードから新規作成モードへ戻る（フォーム見出しのボタンから）。
+  // 選択を外してフォームを空に戻し、作成ボタン（下書きで作成／登録）を出す。
+  const handleNewEvent = () => {
+    setSelectedId(null);
+    setForm(emptyForm);
+    setMessage('');
+    scrollToEventForm();
+  };
+
   // 開催中イベントの手動終了（編集フォームのボタンから）。
   // 受付（manualEndAt の記録）だけをここで行い、実際の終了処理
   // （レポート送信とデータ消去）は次回のスケジューラ実行に委ねる。
@@ -580,6 +595,9 @@ export default function EventAdminPage() {
   const selected = events.find((e) => e.id === selectedId) ?? null;
   const activeCount = countConcurrentEvents(events);
   const capReached = !canCreateAnotherEvent(events);
+  // 終了日の上限は開始日基準のシーズン終了日（1月31日）。開始日が
+  // 未入力の間は今日（JST）を基準にする。カレンダーでそれより後を選べない。
+  const endDateMax = seasonEndDateFor(form.startDate || jstDateString(new Date()));
 
   const statusText = (status: EventConfig['status']) =>
     adminText(
@@ -672,7 +690,13 @@ export default function EventAdminPage() {
           }}
         >
           {events.map((event) => {
-            const badge = statusBadgeColors(event.status);
+            // 終了受付済み（manualEndAt あり・終了処理は未完了）の間は
+            // 「開催中」ではなく「終了処理中」と出し、色も終了側に寄せる。
+            const ending = Boolean(event.manualEndAt) && event.status !== 'ended';
+            const badge = statusBadgeColors(ending ? 'ended' : event.status);
+            const displayStatus = ending
+              ? adminText(locale, 'statusEnding')
+              : statusText(event.status);
             return (
               <li
                 key={event.id}
@@ -711,7 +735,7 @@ export default function EventAdminPage() {
                       backgroundColor: badge.dot,
                     }}
                   />
-                  {statusText(event.status)}
+                  {displayStatus}
                 </span>
                 <a
                   href={`/event-admin/${event.id}`}
@@ -739,7 +763,7 @@ export default function EventAdminPage() {
                       end: event.endDateUndecided
                         ? adminText(locale, 'endDateUndecidedShort')
                         : event.endDate,
-                      status: statusText(event.status),
+                      status: displayStatus,
                       mode: adminText(
                         locale,
                         event.resetMode === 'full-daily'
@@ -857,11 +881,31 @@ export default function EventAdminPage() {
       </section>
 
       <section id="event-form" style={{ ...cardStyle, marginTop: 28, padding: 24 }}>
-        <h2 style={{ fontSize: 17, fontWeight: 800, margin: '0 0 14px' }}>
-          {selected
-            ? adminText(locale, 'editEventTitle', { name: selected.name })
-            : adminText(locale, 'newEventTitle')}
-        </h2>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 12,
+            flexWrap: 'wrap',
+            margin: '0 0 14px',
+          }}
+        >
+          <h2 style={{ fontSize: 17, fontWeight: 800, margin: 0 }}>
+            {selected
+              ? adminText(locale, 'editEventTitle', { name: selected.name })
+              : adminText(locale, 'newEventTitle')}
+          </h2>
+          {selected && (
+            <button
+              type="button"
+              onClick={handleNewEvent}
+              style={cardActionButtonStyle}
+            >
+              {adminText(locale, 'newEventButton')}
+            </button>
+          )}
+        </div>
         {!selected && capReached && (
           <p style={{ ...noticeStyle, marginBottom: 14 }}>
             {adminText(locale, 'concurrentCapReached', { cap: String(MAX_CONCURRENT_EVENTS) })}
@@ -877,7 +921,7 @@ export default function EventAdminPage() {
         </label>
         <label style={labelStyle}>
           {adminText(locale, 'endDateLabel')}
-          <input style={inputStyle} type="date" value={form.endDate} disabled={form.endDateUndecided} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+          <input style={inputStyle} type="date" value={form.endDate} max={endDateMax} disabled={form.endDateUndecided} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
         </label>
         <div style={{ marginBottom: 12 }}>
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600 }}>

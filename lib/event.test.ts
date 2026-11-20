@@ -275,7 +275,10 @@ describe('isFinalizationDue', () => {
 });
 
 describe('同時イベント上限（MAX_CONCURRENT_EVENTS）', () => {
-  const ev = (status: EventConfig['status']) => ({ status });
+  const ev = (
+    status: EventConfig['status'],
+    manualEndAt: string | null = null,
+  ) => ({ status, manualEndAt });
 
   it('上限は3', () => {
     expect(MAX_CONCURRENT_EVENTS).toBe(3);
@@ -288,6 +291,18 @@ describe('同時イベント上限（MAX_CONCURRENT_EVENTS）', () => {
     expect(
       countConcurrentEvents([ev('live'), ev('ended'), ev('draft'), ev('ended')]),
     ).toBe(2);
+  });
+
+  it('終了受付済み（manualEndAt あり）のイベントは終了処理の完了を待たずに数えない', () => {
+    const endedAt = '2026-12-31T03:00:00.000Z';
+    expect(countsTowardConcurrentCap(ev('live', endedAt))).toBe(false);
+    expect(
+      countConcurrentEvents([ev('live'), ev('live', endedAt), ev('draft')]),
+    ).toBe(2);
+    // 開催中2件＋終了受付済み1件なら、枠は2件分なのでもう1件作れる
+    expect(
+      canCreateAnotherEvent([ev('live'), ev('live'), ev('live', endedAt)]),
+    ).toBe(true);
   });
 
   it('イベントが無ければ作成できる', () => {

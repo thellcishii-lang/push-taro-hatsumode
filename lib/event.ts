@@ -330,23 +330,28 @@ export function isResetDue(
   return resetDateKeyFor(event, now) !== null;
 }
 
-/** 同時イベント上限のカウント対象かどうか（終了したイベントは数えない）。 */
+/**
+ * 同時イベント上限のカウント対象かどうか。
+ * 終了したイベントは数えない。手動終了を受け付けたイベント
+ * （manualEndAt 設定済み）も、終了処理の完了を待たずに数えない
+ * （終了を受け付けた時点で主催者は次のイベントを仕込める）。
+ */
 export function countsTowardConcurrentCap(
-  event: Pick<EventConfig, 'status'>,
+  event: Pick<EventConfig, 'status' | 'manualEndAt'>,
 ): boolean {
-  return event.status !== 'ended';
+  return event.status !== 'ended' && !event.manualEndAt;
 }
 
-/** 主催者が現在仕込んでいるイベント数（下書き＋開催中）。 */
+/** 主催者が現在仕込んでいるイベント数（下書き＋開催中。終了受付済みは除く）。 */
 export function countConcurrentEvents(
-  events: Pick<EventConfig, 'status'>[],
+  events: Pick<EventConfig, 'status' | 'manualEndAt'>[],
 ): number {
   return events.filter(countsTowardConcurrentCap).length;
 }
 
 /** 新しいイベントをもう1つ仕込めるかどうか（同時上限 MAX_CONCURRENT_EVENTS 未満）。 */
 export function canCreateAnotherEvent(
-  events: Pick<EventConfig, 'status'>[],
+  events: Pick<EventConfig, 'status' | 'manualEndAt'>[],
 ): boolean {
   return countConcurrentEvents(events) < MAX_CONCURRENT_EVENTS;
 }
