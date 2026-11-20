@@ -218,3 +218,32 @@ export async function updateSubscriberLanguage(
   }
   return { ok: true };
 }
+
+export type RegistrationStatusResult =
+  | { ok: true; registered: boolean }
+  | { ok: false; status: number; error: string };
+
+/**
+ * 本人の購読者レコードが「いまの登録分」として残っているかを返す。
+ *
+ * 判定はレコードの有無そのもの（お知らせ API と同じ基準）。日次リセットは
+ * 購読者コレクションを丸ごと消去するため、残っているレコードは前回の
+ * リセット以降に登録された分だけになる。registeredDate と今日の比較では
+ * いけない: 年越しの前倒しリセット（12月31日 21:00 実行・対象日は翌1月1日）
+ * をまたいだ登録は、registeredDate が 12月31日のまま元日の購読者として
+ * 保持される（resetDateKeyFor が 1月1日分を済みとして扱うため）。
+ */
+export async function getVisitorRegistrationStatus(
+  eventId: string,
+  memberId: string,
+): Promise<RegistrationStatusResult> {
+  const event = await getEvent(eventId);
+  if (!event) {
+    return { ok: false, status: 404, error: 'イベントが見つかりません' };
+  }
+  const snap = await eventRef(eventId)
+    .collection(EVENT_SUBCOLLECTIONS.subscribers)
+    .doc(memberId)
+    .get();
+  return { ok: true, registered: snap.exists };
+}
