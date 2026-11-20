@@ -68,6 +68,11 @@ export async function createEvent(input: CreateEventInput): Promise<EventConfig>
   if (!endDateUndecided && endDate < input.startDate) {
     throw new Error('終了日は開始日以降を指定してください');
   }
+  // 終了日はシーズン終了日（1月31日）まで。初詣の契約期間を超えた
+  // 終了日は選べない（UI の max 属性と同じ制限をサーバー側でも担保する）。
+  if (!endDateUndecided && endDate > seasonEndDateFor(input.startDate)) {
+    throw new Error('終了日は1月31日までを指定してください');
+  }
   const resetTime = input.resetTime ?? DEFAULT_RESET_TIME;
   if (!isValidResetTime(resetTime)) {
     throw new Error('リセット時刻の形式が不正です（HH:MM）');
@@ -141,12 +146,17 @@ export async function countEventSubscribers(eventId: string): Promise<number> {
 
 /**
  * 主催者のイベント一覧に現在の購読者数を付ける（一覧カード表示用）。
+ * 終了済み（status === 'ended'）のイベントは一覧に出さない
+ * （利用箇所は主催者一覧の GET /api/events のみ。同時作成枠の判定は
+ * listEventsByOwner 側で従来どおり全件を対象にする）。
  * 数えられないイベントがあっても一覧自体は出す（そのイベントは 0 として扱う）。
  */
 export async function listEventsByOwnerWithSubscriberCounts(
   ownerUid: string,
 ): Promise<EventWithSubscriberCount[]> {
-  const events = await listEventsByOwner(ownerUid);
+  const events = (await listEventsByOwner(ownerUid)).filter(
+    (event) => event.status !== 'ended',
+  );
   return Promise.all(
     events.map(async (event) => ({
       ...event,
@@ -298,6 +308,17 @@ export async function updateEvent(
     patch.endDate < patch.startDate
   ) {
     throw new Error('終了日は開始日以降を指定してください');
+  }
+  // 終了日はシーズン終了日（1月31日）まで（作成時と同じ制限）。
+  // 開始日がパッチに無い場合は保存済みの開始日を基準にする。
+  // 「未定」への変更時は呼び出し側（PATCH ルート）が終了日をシーズン
+  // 終了日に寄せており、ここでは対象外にする。
+  if (patch.endDate !== undefined && patch.endDateUndecided !== true) {
+    const startDate =
+      patch.startDate ?? (await getEvent(eventId))?.startDate;
+    if (startDate && patch.endDate > seasonEndDateFor(startDate)) {
+      throw new Error('終了日は1月31日までを指定してください');
+    }
   }
   await db
     .collection(EVENTS_COLLECTION)

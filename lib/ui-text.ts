@@ -1359,6 +1359,12 @@ export const ADMIN_TEXT = {
     zh: '已结束',
     ko: '종료',
   },
+  statusEnding: {
+    ja: '終了処理中',
+    en: 'Ending…',
+    zh: '结束处理中',
+    ko: '종료 처리 중',
+  },
   eventMeta: {
     ja: '{start} 〜 {end}／状態: {status}／リセット: {mode} {time}',
     en: '{start} – {end} / Status: {status} / Reset: {mode} {time}',
@@ -1384,10 +1390,10 @@ export const ADMIN_TEXT = {
     ko: '리셋 없음',
   },
   newEventButton: {
-    ja: '＋ 新規イベント',
-    en: '+ New event',
-    zh: '＋ 新建活动',
-    ko: '＋ 새 이벤트',
+    ja: '新規イベントを追加',
+    en: 'Add new event',
+    zh: '添加新活动',
+    ko: '새 이벤트 추가',
   },
   concurrentCapNote: {
     ja: '同時に仕込めるイベントは{cap}つまでです（現在{active}つ）',

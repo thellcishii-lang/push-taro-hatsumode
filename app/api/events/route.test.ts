@@ -1,6 +1,7 @@
 // app/api/events/route.test.ts
 // POST の作成時状態指定（下書き／開催中）が createEvent へ渡ることと、
-// 不正な状態指定・同時上限では作成されないことを検証する。
+// 不正な状態指定・同時上限では作成されないこと、GET が一覧表示用
+// （終了済みを除く）の一覧取得を使うことを検証する。
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -8,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   passwordChangeBlock: vi.fn(),
   createEvent: vi.fn(),
   listEventsByOwner: vi.fn(),
+  listEventsByOwnerWithSubscriberCounts: vi.fn(),
   findOrganizerByOwnerUid: vi.fn(),
   resolveEffectiveCaps: vi.fn(),
 }));
@@ -19,13 +21,15 @@ vi.mock('@/lib/event-auth', () => ({
 vi.mock('@/lib/event-store', () => ({
   createEvent: mocks.createEvent,
   listEventsByOwner: mocks.listEventsByOwner,
+  listEventsByOwnerWithSubscriberCounts:
+    mocks.listEventsByOwnerWithSubscriberCounts,
 }));
 vi.mock('@/lib/organizers', () => ({
   findOrganizerByOwnerUid: mocks.findOrganizerByOwnerUid,
   resolveEffectiveCaps: mocks.resolveEffectiveCaps,
 }));
 
-import { POST } from './route';
+import { GET, POST } from './route';
 
 function postRequest(body: Record<string, unknown>) {
   return new Request('http://localhost/api/events', {
@@ -52,6 +56,37 @@ beforeEach(() => {
     couponCap: 100,
   });
   mocks.createEvent.mockResolvedValue({ id: 'event-1', status: 'draft' });
+  mocks.listEventsByOwnerWithSubscriberCounts.mockResolvedValue([]);
+});
+
+describe('GET /api/events', () => {
+  it('一覧表示用（終了済みを除く）の一覧を返す', async () => {
+    const listed = [
+      { id: 'event-1', status: 'live', subscriberCount: 3 },
+      { id: 'event-2', status: 'draft', subscriberCount: 0 },
+    ];
+    mocks.listEventsByOwnerWithSubscriberCounts.mockResolvedValue(listed);
+    const response = await GET(
+      new Request('http://localhost/api/events', { method: 'GET' }),
+    );
+    expect(response.status).toBe(200);
+    expect(
+      mocks.listEventsByOwnerWithSubscriberCounts,
+    ).toHaveBeenCalledWith('owner-1');
+    const body = (await response.json()) as { events: unknown };
+    expect(body.events).toEqual(listed);
+  });
+
+  it('未認証なら 401', async () => {
+    mocks.getUidFromRequest.mockResolvedValue(null);
+    const response = await GET(
+      new Request('http://localhost/api/events', { method: 'GET' }),
+    );
+    expect(response.status).toBe(401);
+    expect(
+      mocks.listEventsByOwnerWithSubscriberCounts,
+    ).not.toHaveBeenCalled();
+  });
 });
 
 describe('POST /api/events', () => {
