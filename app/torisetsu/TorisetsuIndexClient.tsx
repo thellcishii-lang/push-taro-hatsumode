@@ -26,7 +26,8 @@ export default function TorisetsuIndexClient() {
             <div className="t-plan-name">Push-taro 初詣</div>
             <div className="t-plan-desc">神社の初詣向け</div>
             <ul className="t-plan-list">
-              <li>データのリセット方式A / Bの違い</li>
+              <li>データのリセット方式A / B / Cの違い</li>
+              <li>12月31日の前倒しリセットと年始プッシュ</li>
               <li>イベント終了時の消去手順</li>
               <li>消去前に届く集計レポート</li>
               <li>消込の権限について</li>
