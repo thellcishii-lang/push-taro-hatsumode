@@ -3,69 +3,22 @@
 // components/NewYearSheepGreeting.tsx
 // 元日の羊の挨拶オーバーレイ（1月1日の初回起動時のみ・表示判定は
 // lib/new-year-greeting.ts）。開くと羊が画面にいて、タップすると
-// 「メェー」と鳴いて（WebAudio で合成した鳴き声。外部音源なし）
+// 「メェー」と鳴いて（実録音源。lib/sheep-baa.ts）
 // 「あけましておめでとうございます」を出してから通常画面に戻る。
 // タップの瞬間に表示済みフラグを端末へ保存する（サーバーには持たない）。
 import { useEffect, useRef, useState } from 'react';
 import { uiText } from '@/lib/ui-text';
 import type { Locale } from '@/lib/i18n';
 import { newYearGreetingStorageKey } from '@/lib/new-year-greeting';
+import { playSheepBaa } from '@/lib/sheep-baa';
 import { SheepCharacter } from './SheepCharacter';
 
 const ACCENT = '#B3352B';
 const INK = '#2A1E17';
 
-/**
- * 羊の鳴き声を WebAudio で合成する。「メェー」の震えた感じは、
- * ノコギリ波を低めに滑らせながら振幅を約28Hzで揺らして作る。
- * 音が出ない環境でも挨拶の流れは止めない。
- */
+/** 羊の鳴き声を再生する（実録音源。lib/sheep-baa.ts）。 */
 function playBaa() {
-  try {
-    const Ctor =
-      window.AudioContext ??
-      (window as unknown as { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext;
-    if (!Ctor) return;
-    const ctx = new Ctor();
-    const duration = 0.7;
-    const start = ctx.currentTime;
-
-    const osc = ctx.createOscillator();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(640, start);
-    osc.frequency.exponentialRampToValueAtTime(430, start + duration);
-
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 1600;
-
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(0, start);
-    gain.gain.linearRampToValueAtTime(0.16, start + 0.06);
-    gain.gain.setValueAtTime(0.16, start + duration - 0.14);
-    gain.gain.linearRampToValueAtTime(0, start + duration);
-
-    const lfo = ctx.createOscillator();
-    lfo.frequency.value = 28;
-    const lfoGain = ctx.createGain();
-    lfoGain.gain.value = 0.085;
-    lfo.connect(lfoGain);
-    lfoGain.connect(gain.gain);
-
-    osc.connect(filter);
-    filter.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(start);
-    lfo.start(start);
-    osc.stop(start + duration);
-    lfo.stop(start + duration);
-    osc.onended = () => {
-      void ctx.close().catch(() => {});
-    };
-  } catch {
-    // 音が出なくても挨拶は続ける
-  }
+  playSheepBaa();
 }
 
 export function NewYearSheepGreeting({
