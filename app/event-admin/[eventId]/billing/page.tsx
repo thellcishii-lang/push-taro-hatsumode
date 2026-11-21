@@ -221,7 +221,6 @@ export default function EventBillingAdminPage() {
   const [summary, setSummary] = useState<BillingSummary | null>(null);
   const [loadMessage, setLoadMessage] = useState('');
   const [amountInputs, setAmountInputs] = useState<Record<string, string>>({});
-  const [typeInputs, setTypeInputs] = useState<Record<string, ShopBillingType>>({});
   const [issuingId, setIssuingId] = useState<string | null>(null);
   const [cancelingId, setCancelingId] = useState<string | null>(null);
   const [rowMessages, setRowMessages] = useState<Record<string, string>>({});
@@ -289,15 +288,6 @@ export default function EventBillingAdminPage() {
         for (const billing of loadedBillings) {
           if (next[billing.exhibitorId] === undefined && billing.amount > 0) {
             next[billing.exhibitorId] = String(billing.amount);
-          }
-        }
-        return next;
-      });
-      setTypeInputs((current) => {
-        const next = { ...current };
-        for (const billing of loadedBillings) {
-          if (next[billing.exhibitorId] === undefined) {
-            next[billing.exhibitorId] = billing.billingType;
           }
         }
         return next;
@@ -382,7 +372,7 @@ export default function EventBillingAdminPage() {
 
   const handleIssue = async (exhibitorId: string) => {
     const amount = Number(amountInputs[exhibitorId] ?? '');
-    const billingType = typeInputs[exhibitorId] ?? 'subscription';
+    const billingType: ShopBillingType = 'one-time';
     setIssuingId(exhibitorId);
     setRowMessages((current) => ({ ...current, [exhibitorId]: '' }));
     try {
@@ -704,8 +694,7 @@ export default function EventBillingAdminPage() {
                 !!billing?.stripeSubscriptionId && status !== 'canceled';
               const isOneTimePaid =
                 billing?.billingType === 'one-time' && status === 'paid';
-              const selectedType: ShopBillingType =
-                typeInputs[exhibitor.id] ?? billing?.billingType ?? 'subscription';
+              const selectedType: ShopBillingType = 'one-time';
               const canIssue = !hasSubscription && !isOneTimePaid;
               return (
                 <div key={exhibitor.id} style={{ ...cardStyle, marginTop: 12, padding: 20 }}>
@@ -773,44 +762,8 @@ export default function EventBillingAdminPage() {
                       <div style={{ fontSize: 13, fontWeight: 600 }}>
                         {adminText(locale, 'billingTypeLabel')}
                       </div>
-                      <div
-                        style={{
-                          display: 'flex',
-                          gap: 16,
-                          marginTop: 6,
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        {(
-                          [
-                            ['subscription', 'billingTypeSubscription'],
-                            ['one-time', 'billingTypeOneTime'],
-                          ] as Array<[ShopBillingType, AdminTextKey]>
-                        ).map(([type, key]) => (
-                          <label
-                            key={type}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 6,
-                              fontSize: 14,
-                              cursor: 'pointer',
-                            }}
-                          >
-                            <input
-                              type="radio"
-                              name={`billing-type-${exhibitor.id}`}
-                              checked={selectedType === type}
-                              onChange={() =>
-                                setTypeInputs((current) => ({
-                                  ...current,
-                                  [exhibitor.id]: type,
-                                }))
-                              }
-                            />
-                            {adminText(locale, key)}
-                          </label>
-                        ))}
+                      <div style={{ fontSize: 14, marginTop: 6 }}>
+                        {adminText(locale, 'billingTypeOneTime')}
                       </div>
                       <div
                         style={{

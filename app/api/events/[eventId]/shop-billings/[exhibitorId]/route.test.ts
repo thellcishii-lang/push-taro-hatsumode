@@ -115,23 +115,27 @@ describe('POST /api/events/[eventId]/shop-billings/[exhibitorId]', () => {
 
   it('出店者がいなければ 404', async () => {
     mocks.getExhibitor.mockResolvedValue(null);
-    const res = await POST(request({ amount: 3000 }), params());
+    const res = await POST(request({ amount: 3000, billingType: 'one-time' }), params());
     expect(res.status).toBe(404);
   });
 
-  it('形態未指定は月額サブスクとして発行し Checkout URL を返す', async () => {
+  it('形態未指定は 400（初詣は一括払いのみ）', async () => {
     const res = await POST(request({ amount: 3000 }), params());
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.checkoutUrl).toBe('https://checkout.stripe.com/pay/cs_1');
-    expect(mocks.startShopBilling).toHaveBeenCalledWith(expect.anything(), {
-      contractId: 'contract-1',
-      eventId: 'event-1',
-      exhibitorId: 'shop-1',
-      exhibitorName: '出店者A',
-      amount: 3000,
-      billingType: 'subscription',
-    });
+    expect(body.error).toContain('一括払いのみ');
+    expect(mocks.startShopBilling).not.toHaveBeenCalled();
+  });
+
+  it('月額サブスクの指定は 400（初詣は一括払いのみ）', async () => {
+    const res = await POST(
+      request({ amount: 3000, billingType: 'subscription' }),
+      params(),
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('一括払いのみ');
+    expect(mocks.startShopBilling).not.toHaveBeenCalled();
   });
 
   it('一括払いとして発行できる', async () => {
@@ -150,7 +154,7 @@ describe('POST /api/events/[eventId]/shop-billings/[exhibitorId]', () => {
       status: 'active',
       stripeSubscriptionId: 'sub_1',
     });
-    const res = await POST(request({ amount: 3000 }), params());
+    const res = await POST(request({ amount: 3000, billingType: 'one-time' }), params());
     expect(res.status).toBe(409);
     expect(mocks.startShopBilling).not.toHaveBeenCalled();
   });
@@ -174,11 +178,11 @@ describe('POST /api/events/[eventId]/shop-billings/[exhibitorId]', () => {
       status: 'canceled',
       stripeSubscriptionId: 'sub_old',
     });
-    const res = await POST(request({ amount: 5000 }), params());
+    const res = await POST(request({ amount: 5000, billingType: 'one-time' }), params());
     expect(res.status).toBe(200);
     expect(mocks.startShopBilling).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ amount: 5000, billingType: 'subscription' }),
+      expect.objectContaining({ amount: 5000, billingType: 'one-time' }),
     );
   });
 
@@ -188,7 +192,7 @@ describe('POST /api/events/[eventId]/shop-billings/[exhibitorId]', () => {
       status: 400,
       error: 'Stripe設定が未完了です。先にAPIキーとWebhookシークレットを保存してください',
     });
-    const res = await POST(request({ amount: 3000 }), params());
+    const res = await POST(request({ amount: 3000, billingType: 'one-time' }), params());
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toContain('Stripe設定が未完了');
@@ -196,7 +200,7 @@ describe('POST /api/events/[eventId]/shop-billings/[exhibitorId]', () => {
 
   it('予期しない例外は 502', async () => {
     mocks.startShopBilling.mockRejectedValue(new Error('network down'));
-    const res = await POST(request({ amount: 3000 }), params());
+    const res = await POST(request({ amount: 3000, billingType: 'one-time' }), params());
     expect(res.status).toBe(502);
   });
 });

@@ -2,7 +2,8 @@
 // 出店者課金オプション: 出店者の課金プランを作り、支払いページ（Stripe
 // Checkout）の URL を発行する（主催者）。カード情報は Stripe の
 // ホスト型ページで扱い、このアプリには一切触れない。
-// 課金形態は発行時に選ぶ: subscription（月額サブスク）/ one-time（一括）。
+// 課金形態は一括払いのみ（初詣は期間限定の行事のため、月額サブスクは
+// 扱わない。subscription が指定されたら 400 で断る）。
 // 発行した URL は課金レコードに保存され、管理画面に表示される
 // （主催者がコピーして出店者に渡す運用）。
 // 既にサブスクリプションがある出店者には再発行しない（金額を変えたい
@@ -49,6 +50,14 @@ export async function POST(
   const billingType = parseBillingType(body.billingType);
   if (!billingType.ok) {
     return NextResponse.json({ error: billingType.error }, { status: 400 });
+  }
+  // 初詣は一括払いのみ。未指定は parseBillingType が subscription 扱いに
+  // するため、one-time の明示指定だけを通す。
+  if (billingType.value !== 'one-time') {
+    return NextResponse.json(
+      { error: '初詣では一括払いのみ利用できます' },
+      { status: 400 },
+    );
   }
 
   const exhibitor = await getExhibitor(eventId, exhibitorId);
