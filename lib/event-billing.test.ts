@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest';
 import {
   BILLING_PAYMENTS_CSV_HEADER,
   buildBillingPaymentsCsv,
+  buildBillingSummaryCsv,
+  summarizeBillingPayments,
   currentAndPreviousMonthKeys,
   effectFromStripeEvent,
   finalizationCancelTargets,
@@ -598,5 +600,105 @@ describe('formatJstDateTime', () => {
 
   it('解釈できない文字列は空文字', () => {
     expect(formatJstDateTime('not-a-date')).toBe('');
+  });
+});
+
+describe('summarizeBillingPayments', () => {
+  const exhibitors = [
+    { id: 'shop-1', name: 'カレー堂' },
+    { id: 'shop-2', name: 'パン屋' },
+  ];
+
+  it('日次・月次・年次と総合計に集計する（JST基準）', () => {
+    const summary = summarizeBillingPayments(
+      [
+        paymentRecord(), // 2026-11-02 09:00 JST, 3000 paid
+        paymentRecord({
+          id: 'evt_2',
+          amount: 5000,
+          paidAt: '2026-11-02T16:00:00.000Z', // 2026-11-03 01:00 JST
+          occurredAt: '2026-11-02T16:00:00.000Z',
+        }),
+        paymentRecord({
+          id: 'evt_3',
+          status: 'failed',
+          paidAt: null,
+          occurredAt: '2026-12-01T00:00:00.000Z', // 2026-12-01 09:00 JST
+        }),
+      ],
+      exhibitors,
+    );
+    expect(summary.daily).toEqual([
+      { period: '2026-11-02', paidCount: 1, paidAmount: 3000, failedCount: 0 },
+      { period: '2026-11-03', paidCount: 1, paidAmount: 5000, failedCount: 0 },
+      { period: '2026-12-01', paidCount: 0, paidAmount: 0, failedCount: 1 },
+    ]);
+    expect(summary.monthly).toEqual([
+      { period: '2026-11', paidCount: 2, paidAmount: 8000, failedCount: 0 },
+      { period: '2026-12', paidCount: 0, paidAmount: 0, failedCount: 1 },
+    ]);
+    expect(summary.yearly).toEqual([
+      { period: '2026', paidCount: 2, paidAmount: 8000, failedCount: 1 },
+    ]);
+    expect(summary.totalPaidCount).toBe(2);
+    expect(summary.totalPaidAmount).toBe(8000);
+    expect(summary.totalFailedCount).toBe(1);
+  });
+
+  it('出店者別月次は店名つきで集計する', () => {
+    const summary = summarizeBillingPayments(
+      [
+        paymentRecord(),
+        paymentRecord({ id: 'evt_2', exhibitorId: 'shop-2', amount: 2000 }),
+      ],
+      exhibitors,
+    );
+    expect(summary.shopMonthly).toEqual([
+      {
+        month: '2026-11',
+        exhibitorId: 'shop-1',
+        shopName: 'カレー堂',
+        paidCount: 1,
+        paidAmount: 3000,
+        failedCount: 0,
+      },
+      {
+        month: '2026-11',
+        exhibitorId: 'shop-2',
+        shopName: 'パン屋',
+        paidCount: 1,
+        paidAmount: 2000,
+        failedCount: 0,
+      },
+    ]);
+  });
+
+  it('日付として読めない記録は除く', () => {
+    const summary = summarizeBillingPayments(
+      [paymentRecord({ paidAt: 'not-a-date', occurredAt: 'not-a-date' })],
+      exhibitors,
+    );
+    expect(summary.daily).toEqual([]);
+    expect(summary.totalPaidCount).toBe(0);
+  });
+});
+
+describe('buildBillingSummaryCsv', () => {
+  it('セクション見出しと集計行を出す', () => {
+    const summary = summarizeBillingPayments(
+      [paymentRecord()],
+      [{ id: 'shop-1', name: 'カレー堂' }],
+    );
+    const csv = buildBillingSummaryCsv(summary);
+    expect(csv.startsWith('\uFEFF')).toBe(true);
+    const lines = csv.replace(/^\uFEFF/, '').trimEnd().split('\r\n');
+    expect(lines).toContain('【日次集計】');
+    expect(lines).toContain('【月次集計】');
+    expect(lines).toContain('【年次集計】');
+    expect(lines).toContain('【出店者別月次集計】');
+    expect(lines).toContain('2026-11-02,1,3000,0');
+    expect(lines).toContain('2026-11,カレー堂,1,3000,0');
+    expect(lines).toContain('【総合計】');
+    expect(lines[lines.length - 1]).toBe('1,3000,0');
   });
 });

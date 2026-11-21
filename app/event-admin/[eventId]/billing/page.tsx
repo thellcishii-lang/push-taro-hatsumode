@@ -15,6 +15,7 @@
 // ログイン後は共通シェル（components/AdminShell）を使う。
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import {
   User,
   onAuthStateChanged,
@@ -487,6 +488,36 @@ export default function EventBillingAdminPage() {
     }
   };
 
+  // 集計CSVのダウンロード（日次・月次・年次・出店者別月次）。
+  const handleDownloadSummaryCsv = async () => {
+    if (!user) return;
+    setCsvBusy(true);
+    setCsvMessage('');
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch(
+        `/api/events/${eventId}/shop-billings/summary/export`,
+        { headers: { Authorization: `Bearer ${idToken}` } },
+      );
+      if (!res.ok) throw new Error(adminText(locale, 'billingCsvFailed'));
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `billing-summary-${eventId}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setCsvMessage(
+        e instanceof Error ? e.message : adminText(locale, 'billingCsvFailed'),
+      );
+    } finally {
+      setCsvBusy(false);
+    }
+  };
+
   const billingByExhibitor = new Map(billings.map((b) => [b.exhibitorId, b]));
   const exhibitorName = (id: string) =>
     exhibitors.find((e) => e.id === id)?.name ?? id;
@@ -887,16 +918,38 @@ export default function EventBillingAdminPage() {
               }}
             >
               <h2 style={sectionTitleStyle}>{adminText(locale, 'billingPaymentsTitle')}</h2>
-              <button
-                onClick={() => void handleDownloadCsv()}
-                disabled={csvBusy}
-                style={secondaryButtonStyle}
-              >
-                <span style={adminButtonContentStyle}>
-                  {csvBusy && <ButtonSpinner />}
-                  {adminText(locale, 'billingCsvDownload')}
-                </span>
-              </button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => void handleDownloadCsv()}
+                  disabled={csvBusy}
+                  style={secondaryButtonStyle}
+                >
+                  <span style={adminButtonContentStyle}>
+                    {csvBusy && <ButtonSpinner />}
+                    {adminText(locale, 'billingCsvDownload')}
+                  </span>
+                </button>
+                <button
+                  onClick={() => void handleDownloadSummaryCsv()}
+                  disabled={csvBusy}
+                  style={secondaryButtonStyle}
+                >
+                  <span style={adminButtonContentStyle}>
+                    {adminText(locale, 'billingSummaryCsvDownload')}
+                  </span>
+                </button>
+                <Link
+                  href={`/event-admin/${eventId}/billing/report`}
+                  style={{
+                    ...secondaryButtonStyle,
+                    textDecoration: 'none',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  {adminText(locale, 'billingReportLink')}
+                </Link>
+              </div>
             </div>
             {csvMessage && <p style={adminErrorTextStyle}>{csvMessage}</p>}
             {payments.length === 0 ? (
