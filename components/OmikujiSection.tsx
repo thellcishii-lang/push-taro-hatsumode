@@ -2,7 +2,8 @@
 
 // components/OmikujiSection.tsx
 // 参拝者画面のおみくじセクション。期間中1端末1回だけ引ける。
-// 流れ: 引く → 筒を振るアニメーション → 羊の反応 → 結果の詳細。
+// 流れ: 引く → 筒を振るアニメーション → 羊の反応（実録の鳴き声つき）
+// → 結果の詳細。
 // 抽選済みの端末では、開くたびに同じ結果を表示する（引き直しはできない）。
 // 運勢の文面は lib/omikuji-content.ts から画面の言語で引く。
 import { useEffect, useRef, useState } from 'react';
@@ -18,6 +19,7 @@ import {
   type FortuneCategory,
   type OmikujiGrade,
 } from '@/lib/omikuji-content';
+import { playSheepBaa, primeSheepBaa } from '@/lib/sheep-baa';
 import { SheepCharacter } from './SheepCharacter';
 
 const ACCENT = '#B3352B';
@@ -102,6 +104,8 @@ export function OmikujiSection({
   }, [eventId, user]);
 
   const handleDraw = async () => {
+    // タップの中で音源を先読みしておく（結果表示時の再生を iOS でも通すため）
+    primeSheepBaa();
     setError('');
     setPhase('shaking');
     const startedAt = Date.now();
@@ -129,6 +133,8 @@ export function OmikujiSection({
         setPhase('result');
         return;
       }
+      // 羊の反応が出る瞬間に、実録の鳴き声を鳴らす
+      playSheepBaa();
       setPhase('reaction');
       const timer = window.setTimeout(() => setPhase('result'), 2400);
       timersRef.current.push(timer);
