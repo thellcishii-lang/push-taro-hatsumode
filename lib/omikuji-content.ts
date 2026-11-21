@@ -683,10 +683,10 @@ export const OMIKUJI_CONTENT: Record<OmikujiGrade, OmikujiGradeContent> = {
 /** 羊の反応セリフ（運勢の帯ごと）。 */
 export const SHEEP_REACTION_LINES: Record<SheepReaction, Record<Locale, string>> = {
   rejoice: {
-    ja: 'やったー！大吉だメェ！',
-    en: 'Yay! Great Blessing, baa!',
-    zh: '太好了！是大吉，咩！',
-    ko: '야호! 대길이다 메에!',
+    ja: '今年はこの勢いでいこう！',
+    en: "Let's ride this momentum all year!",
+    zh: '今年就借着这股势头一往无前吧！',
+    ko: '올해는 이 기세로 거침없이 가자!',
   },
   happy: {
     ja: 'いい運勢だメェ！',
@@ -707,7 +707,7 @@ export const SHEEP_REACTION_LINES: Record<SheepReaction, Record<Locale, string>>
     ko: '괜찮아, 운은 이제부터다 메에.',
   },
   daikyo: {
-    ja: '今年の悪運使い果たした！',
+    ja: '今年の悪い事を全て使い果たしたね！',
     en: "You've used up all of this year's bad luck!",
     zh: '今年的厄运已经全部用光了！',
     ko: '올해의 나쁜 운은 다 써버렸어!',

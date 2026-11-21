@@ -197,7 +197,11 @@ let baaAudio: HTMLAudioElement | null = null;
 
 function getBaaAudio(): HTMLAudioElement | null {
   try {
-    if (!baaAudio) baaAudio = new Audio(SHEEP_BAA_DATA_URI);
+    if (!baaAudio) {
+      baaAudio = new Audio(SHEEP_BAA_DATA_URI);
+      // 境内に配慮して、音量は控えめにしておく
+      baaAudio.volume = 0.6;
+    }
     return baaAudio;
   } catch {
     return null;

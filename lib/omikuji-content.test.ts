@@ -51,7 +51,7 @@ describe('OMIKUJI_CONTENT', () => {
         expect(lines[locale].trim().length).toBeGreaterThan(0);
       }
     }
-    expect(SHEEP_REACTION_LINES.daikyo.ja).toBe('今年の悪運使い果たした！');
+    expect(SHEEP_REACTION_LINES.daikyo.ja).toBe('今年の悪い事を全て使い果たしたね！');
   });
 });
 
