@@ -3,7 +3,7 @@
 // components/GachaSection.tsx
 // 参拝者画面のガチャセクション。期間中1端末1回だけ回せる。
 // 流れ: 回す → カプセルを振るアニメーション → 結果（当選なら景品と
-// 交換用QRコード、ハズレならメッセージ）。
+// 交換用QRコード＋花びらの演出、ハズレならメッセージ）。
 // 抽選済みの端末では、開くたびに同じ結果を表示する（引き直しはできない）。
 // 当選QRの中身はクーポンの消込コードと同じ形式で、会場の消込画面で
 // 読み取ると景品交換（消込）できる。
@@ -13,6 +13,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import type { Locale } from '@/lib/i18n';
 import { uiText } from '@/lib/ui-text';
 import { SheepCharacter } from './SheepCharacter';
+import { GachaPetals } from './GachaPetals';
 
 const ACCENT = '#B3352B';
 const INK = '#2A1E17';
@@ -84,6 +85,8 @@ export function GachaSection({
   const [phase, setPhase] = useState<Phase>('loading');
   const [result, setResult] = useState<GachaResult | null>(null);
   const [error, setError] = useState('');
+  // 花びらは「いま回して当選した」瞬間だけ出す（抽選済みの再表示では出さない）
+  const [showPetals, setShowPetals] = useState(false);
 
   // 抽選済みかどうかを最初に確認する（済みなら結果をそのまま出す）
   useEffect(() => {
@@ -139,12 +142,15 @@ export function GachaSection({
       // カプセルを振る演出は最低1.1秒見せる
       const wait = Math.max(0, 1100 - (Date.now() - startedAt));
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-      setResult({
+      const drawn: GachaResult = {
         rank: typeof data.rank === 'number' ? data.rank : null,
         prizeName: typeof data.prizeName === 'string' ? data.prizeName : null,
         code: typeof data.code === 'string' ? data.code : null,
         redeemed: data.redeemed === true,
-      });
+      };
+      setResult(drawn);
+      // 当選したら花びらで祝う（ハズレでは出さない）
+      setShowPetals(drawn.rank !== null && drawn.code !== null);
       setPhase('result');
     } catch {
       setError(uiText(locale, 'gachaFailed'));
@@ -276,6 +282,8 @@ export function GachaSection({
           )}
         </div>
       )}
+
+      {phase === 'result' && won && showPetals && <GachaPetals />}
 
       {phase === 'result' && result && !won && (
         <div style={{ ...cardStyle, marginTop: 8, textAlign: 'center' }}>

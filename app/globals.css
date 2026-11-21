@@ -110,3 +110,9 @@
   50% { transform: translateY(2px) rotate(3deg); }
   75% { transform: translateY(-4px) rotate(-2deg); }
 }
+@keyframes gacha-petal-fall {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0; }
+  10% { opacity: 0.95; }
+  50% { transform: translate3d(calc(var(--petal-drift) * 0.4), 55vh, 0) rotate(190deg); }
+  100% { transform: translate3d(var(--petal-drift), 108vh, 0) rotate(360deg); opacity: 0.9; }
+}
