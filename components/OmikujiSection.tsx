@@ -2,8 +2,10 @@
 
 // components/OmikujiSection.tsx
 // 参拝者画面のおみくじセクション。期間中1端末1回だけ引ける。
-// 流れ: 引く → 筒を振るアニメーション → 羊の反応（実録の鳴き声つき）
-// → 結果の詳細。
+// 演出の流れ: ボタンの後ろから羊が顔だけひょこっと → 引くと画面ごと
+// ガシャガシャ（筒＋振動）→ 画面が真っ白に → 羊がドアップで横から
+// 登場し、向こうへ歩いて振り返る（実録の鳴き声つき）→ 結果の詳細。
+// 大吉は運勢名が画面いっぱいに大きく出て、大凶は雨の線が上から降る。
 // 抽選済みの端末では、開くたびに同じ結果を表示する（引き直しはできない）。
 // 運勢の文面は lib/omikuji-content.ts から画面の言語で引く。
 import { useEffect, useRef, useState } from 'react';
@@ -21,6 +23,7 @@ import {
 } from '@/lib/omikuji-content';
 import { playSheepBaa, primeSheepBaa } from '@/lib/sheep-baa';
 import { SheepCharacter } from './SheepCharacter';
+import { DaikyoRain } from './DaikyoRain';
 
 const ACCENT = '#B3352B';
 const GOLD = '#D9A441';
@@ -41,7 +44,7 @@ const CATEGORY_LABEL_KEYS: Record<FortuneCategory, UiTextKey> = {
   work: 'fortuneWork',
 };
 
-type Phase = 'loading' | 'not-drawn' | 'shaking' | 'reaction' | 'result';
+type Phase = 'loading' | 'not-drawn' | 'shaking' | 'flash' | 'reaction' | 'result';
 
 function authHeaders(token: string): Record<string, string> {
   return { ['Authori' + 'zation']: 'Bearer ' + token };
@@ -108,6 +111,12 @@ export function OmikujiSection({
     primeSheepBaa();
     setError('');
     setPhase('shaking');
+    // 筒を振る感触として、対応端末では軽く振動させる
+    try {
+      navigator.vibrate?.(180);
+    } catch {
+      // 振動が使えない環境では何もしない
+    }
     const startedAt = Date.now();
     try {
       const token = await user.getIdToken();
@@ -133,11 +142,17 @@ export function OmikujiSection({
         setPhase('result');
         return;
       }
-      // 羊の反応が出る瞬間に、実録の鳴き声を鳴らす
-      playSheepBaa();
-      setPhase('reaction');
-      const timer = window.setTimeout(() => setPhase('result'), 2400);
-      timersRef.current.push(timer);
+      // 演出: 画面が真っ白に → 羊が横から登場する反応へ
+      setPhase('flash');
+      const flashTimer = window.setTimeout(() => {
+        setPhase('reaction');
+        // 羊が画面に入ってきた頃に、実録の鳴き声を鳴らす
+        const baaTimer = window.setTimeout(() => playSheepBaa(), 700);
+        timersRef.current.push(baaTimer);
+        const resultTimer = window.setTimeout(() => setPhase('result'), 3400);
+        timersRef.current.push(resultTimer);
+      }, 500);
+      timersRef.current.push(flashTimer);
     } catch {
       setError(uiText(locale, 'omikujiFailed'));
       setPhase('not-drawn');
@@ -159,10 +174,25 @@ export function OmikujiSection({
 
       {phase === 'not-drawn' && (
         <div style={{ ...cardStyle, marginTop: 8, textAlign: 'center' }}>
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <SheepCharacter mood="greeting" size={120} />
+          <p style={{ fontSize: 14, margin: 0 }}>{uiText(locale, 'omikujiIntro')}</p>
+          {/* ボタンの後ろから、羊が顔だけひょこっと出す */}
+          <div
+            aria-hidden="true"
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              marginTop: 12,
+              marginBottom: -14,
+              position: 'relative',
+              zIndex: 0,
+            }}
+          >
+            <div style={{ width: 120, height: 64, overflow: 'hidden' }}>
+              <div style={{ animation: 'sheep-peek 2.6s ease-in-out infinite' }}>
+                <SheepCharacter mood="greeting" size={120} />
+              </div>
+            </div>
           </div>
-          <p style={{ fontSize: 14, margin: '8px 0 0' }}>{uiText(locale, 'omikujiIntro')}</p>
           <button
             onClick={() => void handleDraw()}
             style={{
@@ -176,6 +206,8 @@ export function OmikujiSection({
               border: 'none',
               borderRadius: 10,
               cursor: 'pointer',
+              position: 'relative',
+              zIndex: 1,
             }}
           >
             {uiText(locale, 'omikujiDrawButton')}
@@ -189,7 +221,14 @@ export function OmikujiSection({
       )}
 
       {phase === 'shaking' && (
-        <div style={{ ...cardStyle, marginTop: 8, textAlign: 'center' }}>
+        <div
+          style={{
+            ...cardStyle,
+            marginTop: 8,
+            textAlign: 'center',
+            animation: 'omikuji-screen-shake 0.45s linear infinite',
+          }}
+        >
           <div
             aria-hidden="true"
             style={{
@@ -222,17 +261,63 @@ export function OmikujiSection({
         </div>
       )}
 
+      {phase === 'flash' && (
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: '#ffffff',
+            zIndex: 70,
+            pointerEvents: 'none',
+            animation: 'omikuji-flash-fade 0.5s ease-out both',
+          }}
+        />
+      )}
+
       {phase === 'reaction' && content && reaction && (
-        <div style={{ ...cardStyle, marginTop: 8, textAlign: 'center' }}>
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <SheepCharacter mood={reaction} size={170} />
+        <div
+          style={{
+            ...cardStyle,
+            marginTop: 8,
+            textAlign: 'center',
+            position: 'relative',
+            overflow: 'hidden',
+          }}
+        >
+          {reaction === 'daikyo' && <DaikyoRain />}
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              position: 'relative',
+            }}
+          >
+            <div style={{ animation: 'omikuji-sheep-scene 3.4s ease-in-out both' }}>
+              <SheepCharacter mood={reaction} size={200} />
+            </div>
           </div>
-          <p style={{ fontSize: 19, fontWeight: 900, color: ACCENT, margin: '10px 0 0' }}>
-            {content.name[locale]}
-          </p>
-          <p style={{ fontSize: 15, fontWeight: 700, color: INK, margin: '6px 0 0' }}>
-            {SHEEP_REACTION_LINES[reaction][locale]}
-          </p>
+          <div
+            style={{
+              animation: 'omikuji-line-in 0.5s ease-out 2s both',
+              position: 'relative',
+            }}
+          >
+            <p
+              style={{
+                fontSize: reaction === 'rejoice' ? 58 : 30,
+                fontWeight: 900,
+                color: ACCENT,
+                margin: '10px 0 0',
+                lineHeight: 1.15,
+              }}
+            >
+              {content.name[locale]}
+            </p>
+            <p style={{ fontSize: 15, fontWeight: 700, color: INK, margin: '6px 0 0' }}>
+              {SHEEP_REACTION_LINES[reaction][locale]}
+            </p>
+          </div>
         </div>
       )}
 
