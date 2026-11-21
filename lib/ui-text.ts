@@ -1210,10 +1210,10 @@ export const ADMIN_TEXT = {
     ko: '출점자별 과금',
   },
   billingShopsNote: {
-    ja: '出店者ごとに課金形態（月額／一括）と金額を設定して「支払いリンクを発行」を押すと、出店者に渡す支払いページの URL が作られます。URL をコピーして出店者に送ってください。月額の未払いが確定した出店者と、一括払いを返金された出店者は、その出店者のクーポンが参拝者ページに表示されなくなります（取得済みのクーポンはそのまま使えます）。月額は支払いが復旧すると自動で表示に戻ります。',
-    en: 'Set the billing type (monthly / one-time) and amount per exhibitor and press "Issue payment link" to create the payment page URL for that exhibitor. Copy the URL and send it to the exhibitor. Exhibitors whose monthly payment failure is final, and exhibitors whose one-time payment is refunded, have their coupons hidden from the visitor page (coupons already claimed stay usable). Monthly billing returns automatically when payment recovers.',
-    zh: '为每个参展商设置收费方式（月费／一次性）和金额并点击“发行付款链接”，即可生成给参展商的付款页面 URL。请复制 URL 并发送给参展商。月费确定未付款的参展商，以及一次性付款被退款的参展商，其优惠券将不再显示在访客页面（已领取的优惠券仍可使用）。月费在付款恢复后将自动恢复展示。',
-    ko: '출점자마다 과금 형태(월간/일괄)와 금액을 설정하고 "결제 링크 발행"을 누르면 출점자에게 전달할 결제 페이지 URL이 만들어집니다. URL을 복사해 출점자에게 보내 주세요. 월간 미납이 확정된 출점자와 일괄 결제가 환불된 출점자는 그 출점자의 쿠폰이 방문자 페이지에 표시되지 않게 됩니다(이미 받은 쿠폰은 그대로 사용할 수 있습니다). 월간은 결제가 복구되면 자동으로 표시로 돌아갑니다.',
+    ja: '出店者ごとに金額を設定して「支払いリンクを発行」を押すと、出店者に渡す支払いページの URL が作られます。URL をコピーして出店者に送ってください。課金形態は一括払いのみです。一括払いを返金された出店者は、その出店者のクーポンが参拝者ページに表示されなくなります（取得済みのクーポンはそのまま使えます）。',
+    en: 'Set the amount per exhibitor and press "Issue payment link" to create the payment page URL for that exhibitor. Copy the URL and send it to the exhibitor. Billing is one-time only. Exhibitors whose one-time payment is refunded have their coupons hidden from the visitor page (coupons already claimed stay usable).',
+    zh: '为每个参展商设置金额并点击“发行付款链接”，即可生成给参展商的付款页面 URL。请复制 URL 并发送给参展商。收费方式仅限一次性付款。一次性付款被退款的参展商，其优惠券将不再显示在访客页面（已领取的优惠券仍可使用）。',
+    ko: '출점자마다 금액을 설정하고 "결제 링크 발행"을 누르면 출점자에게 전달할 결제 페이지 URL이 만들어집니다. URL을 복사해 출점자에게 보내 주세요. 과금 형태는 일괄 결제만 가능합니다. 일괄 결제가 환불된 출점자는 그 출점자의 쿠폰이 방문자 페이지에 표시되지 않게 됩니다(이미 받은 쿠폰은 그대로 사용할 수 있습니다).',
   },
   billingTypeLabel: {
     ja: '課金形態',
