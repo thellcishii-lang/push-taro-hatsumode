@@ -17,7 +17,9 @@ import {
   jstDateString,
   jstTimeString,
   localeTopic,
+  type EventConfig,
 } from './event';
+import { NEW_YEAR_PUSH_TEXTS, isNewYearPushDue } from './new-year-push';
 import { getEvent } from './event-store';
 import {
   parseLocalizedTexts,
@@ -517,4 +519,84 @@ export async function processDueCampaigns(
     }
   }
   return sent;
+}
+
+/**
+ * 年始プッシュの自動送信（event-tick から呼ぶ）。
+ * 1月1日0時台に対象イベントへ1回だけ送る。二重送信防止のため、送信前に
+ * トランザクションで送信年を確保する。全言語の送信に失敗したら確保を
+ * 取り消し、0時台の次の tick で送り直す。送れたら true を返す。
+ */
+export async function processNewYearPush(
+  event: EventConfig,
+  now: Date,
+): Promise<boolean> {
+  if (!isNewYearPushDue(event, now)) return false;
+  const year = Number(jstDateString(now).slice(0, 4));
+  const ref = db.collection('events').doc(event.id);
+
+  const claimed = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) return false;
+    if (snap.data()?.newYearPushSentYear === year) return false;
+    tx.update(ref, { newYearPushSentYear: year });
+    return true;
+  });
+  if (!claimed) return false;
+
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const targetUrl = new URL(`/e/${event.id}`, baseUrl).toString();
+  const iconUrl = new URL('/icon-192x192.png', baseUrl).toString();
+
+  let delivered = 0;
+  for (const locale of SUPPORTED_LOCALES) {
+    const text = NEW_YEAR_PUSH_TEXTS[locale];
+    try {
+      await messaging.send({
+        topic: localeTopic(event.id, locale),
+        data: {
+          title: text.title,
+          body: text.body,
+          icon: iconUrl,
+          url: targetUrl,
+          eventId: event.id,
+        },
+        apns: {
+          payload: {
+            aps: {
+              alert: { title: text.title, body: text.body },
+              sound: 'default',
+              badge: 1,
+              'content-available': 1,
+            },
+          },
+        },
+        android: {
+          priority: 'high',
+          notification: {
+            title: text.title,
+            body: text.body,
+            icon: iconUrl,
+            sound: 'default',
+          },
+        },
+        webpush: {
+          headers: { Urgency: 'high' },
+          fcmOptions: { link: targetUrl },
+        },
+      });
+      delivered++;
+    } catch {
+      // 言語単位の失敗は他言語を止めない（campaign 配信と同じ方針）
+    }
+  }
+
+  if (delivered === 0) {
+    // 1言語も届かなかったら確保を取り消して、次の tick で送り直す
+    await ref
+      .update({ newYearPushSentYear: FieldValue.delete() })
+      .catch(() => {});
+    return false;
+  }
+  return true;
 }

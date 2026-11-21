@@ -4,6 +4,7 @@
 //
 // 役割は「いま処理すべきイベントを拾って、そのイベント単独で処理する」ことだけ:
 // - 終了処理（登録情報消去）が最優先
+// - 年始プッシュ（1月1日0時台だけ、対象イベントに1回）
 // - 次に予約配信（到期した campaign の実行。リセットより前に送る）
 // - 最後に日次リセット（設定時刻を過ぎていて今日分が未実施のイベント）
 // 配信・リセット・終了処理は互いに独立したステップとして実行し、
@@ -23,7 +24,7 @@ import {
   sweepExpiredReportBackups,
 } from '@/lib/event-report';
 import { trySendFinalReportEmail } from '@/lib/event-report-send';
-import { processDueCampaigns } from '@/lib/event-push';
+import { processDueCampaigns, processNewYearPush } from '@/lib/event-push';
 import { recordTickRun, type TickRunInput } from '@/lib/tick-runs';
 import { dispatchOperatorAlerts } from '@/lib/monitoring';
 
@@ -56,6 +57,7 @@ export async function GET(req: Request) {
     completed: boolean;
   }> = [];
   const campaignsSent: Array<{ eventId: string; sent: number }> = [];
+  const newYearPushSent: string[] = [];
   const errors: Array<{ eventId: string; message: string }> = [];
 
   try {
@@ -78,6 +80,15 @@ export async function GET(req: Request) {
         } else {
           // 予約配信はリセットより先に実行する（リセットで購読が消える前に届ける）
           if (event.status === 'live') {
+            try {
+              const sentNewYear = await processNewYearPush(event, now);
+              if (sentNewYear) newYearPushSent.push(event.id);
+            } catch (error) {
+              errors.push({
+                eventId: event.id,
+                message: `年始プッシュに失敗: ${error instanceof Error ? error.message : String(error)}`,
+              });
+            }
             try {
               const sent = await processDueCampaigns(event.id, now);
               if (sent > 0) campaignsSent.push({ eventId: event.id, sent });
@@ -139,6 +150,7 @@ export async function GET(req: Request) {
       ok: true,
       processed,
       campaignsSent,
+      newYearPushSent,
       errors,
       emailRetries,
       expiredBackupsDeleted,

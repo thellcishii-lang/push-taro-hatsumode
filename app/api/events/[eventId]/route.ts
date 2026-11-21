@@ -48,6 +48,7 @@ const EDITABLE_FIELDS: Array<keyof UpdateEventInput> = [
   'defaultLocale',
   'admissionQrEnabled',
   'omikujiEnabled',
+  'newYearPushEnabled',
   'gachaEnabled',
   'gachaPrizes',
   'links',

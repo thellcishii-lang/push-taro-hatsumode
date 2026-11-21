@@ -20,6 +20,7 @@ function eventWith(status: EventConfig['status']): EventConfig {
     defaultLocale: 'ja',
     admissionQrEnabled: false,
     omikujiEnabled: true,
+    newYearPushEnabled: true,
     gachaEnabled: false,
     gachaPrizes: [],
     links: [],

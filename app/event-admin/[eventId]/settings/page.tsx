@@ -148,6 +148,7 @@ export default function EventSettingsAdminPage() {
   const [linksMessage, setLinksMessage] = useState('');
   const [linksSaving, setLinksSaving] = useState(false);
   const [omikujiEnabled, setOmikujiEnabled] = useState(true);
+  const [newYearPushEnabled, setNewYearPushEnabled] = useState(true);
   const [gachaEnabled, setGachaEnabled] = useState(false);
   const [prizeRows, setPrizeRows] = useState<GachaPrizeRow[]>(emptyPrizeRows);
   const [funMessage, setFunMessage] = useState('');
@@ -271,6 +272,7 @@ export default function EventSettingsAdminPage() {
     try {
       const data = await callApi(`/api/events/${eventId}`);
       setOmikujiEnabled(data.event?.omikujiEnabled !== false);
+      setNewYearPushEnabled(data.event?.newYearPushEnabled !== false);
       setGachaEnabled(data.event?.gachaEnabled === true);
       const prizes: GachaPrize[] = Array.isArray(data.event?.gachaPrizes)
         ? data.event.gachaPrizes
@@ -346,7 +348,7 @@ export default function EventSettingsAdminPage() {
     try {
       await callApi(`/api/events/${eventId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ omikujiEnabled, gachaEnabled, gachaPrizes: prizes }),
+        body: JSON.stringify({ omikujiEnabled, newYearPushEnabled, gachaEnabled, gachaPrizes: prizes }),
       });
       setFunMessage(adminText(locale, 'funSettingsSaved'));
     } catch (e) {
@@ -589,6 +591,19 @@ export default function EventSettingsAdminPage() {
             </label>
             <span style={{ fontSize: 12, color: '#64748b' }}>
               {adminText(locale, 'omikujiEnabledNote')}
+            </span>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600 }}>
+              <input
+                type="checkbox"
+                checked={newYearPushEnabled}
+                onChange={(e) => setNewYearPushEnabled(e.target.checked)}
+              />{' '}
+              {adminText(locale, 'newYearPushEnabledLabel')}
+            </label>
+            <span style={{ fontSize: 12, color: '#64748b' }}>
+              {adminText(locale, 'newYearPushEnabledNote')}
             </span>
           </div>
           <div style={{ marginBottom: 16 }}>

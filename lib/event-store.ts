@@ -50,6 +50,12 @@ function toEventConfig(id: string, data: FirebaseFirestore.DocumentData): EventC
     // おみくじは既定オン（導入前から表示されていた）。明示的に false の
     // ときだけオフとして読む
     omikujiEnabled: data.omikujiEnabled !== false,
+    // 年始プッシュは既定オン（おみくじと同じ扱い）
+    newYearPushEnabled: data.newYearPushEnabled !== false,
+    newYearPushSentYear:
+      typeof data.newYearPushSentYear === 'number'
+        ? data.newYearPushSentYear
+        : undefined,
     // ガチャは既定オフ。導入前に作られたイベントには項目自体が無い
     gachaEnabled: data.gachaEnabled === true,
     gachaPrizes: parseGachaPrizes(data.gachaPrizes),
@@ -95,6 +101,12 @@ export async function createEvent(input: CreateEventInput): Promise<EventConfig>
     throw new Error('おみくじ設定の形式が不正です');
   }
   if (
+    input.newYearPushEnabled !== undefined &&
+    typeof input.newYearPushEnabled !== 'boolean'
+  ) {
+    throw new Error('年始プッシュ設定の形式が不正です');
+  }
+  if (
     input.gachaEnabled !== undefined &&
     typeof input.gachaEnabled !== 'boolean'
   ) {
@@ -116,6 +128,7 @@ export async function createEvent(input: CreateEventInput): Promise<EventConfig>
     defaultLocale: input.defaultLocale ?? DEFAULT_LOCALE,
     admissionQrEnabled: input.admissionQrEnabled ?? false,
     omikujiEnabled: input.omikujiEnabled ?? true,
+    newYearPushEnabled: input.newYearPushEnabled ?? true,
     gachaEnabled: input.gachaEnabled ?? false,
     gachaPrizes,
     links: normalizeEventLinks(input.links),
@@ -285,6 +298,8 @@ export type UpdateEventInput = Partial<
     | 'defaultLocale'
     | 'admissionQrEnabled'
     | 'omikujiEnabled'
+    | 'newYearPushEnabled'
+    | 'newYearPushSentYear'
     | 'gachaEnabled'
     | 'gachaPrizes'
     | 'links'
@@ -318,6 +333,12 @@ export async function updateEvent(
     typeof patch.omikujiEnabled !== 'boolean'
   ) {
     throw new Error('おみくじ設定の形式が不正です');
+  }
+  if (
+    patch.newYearPushEnabled !== undefined &&
+    typeof patch.newYearPushEnabled !== 'boolean'
+  ) {
+    throw new Error('年始プッシュ設定の形式が不正です');
   }
   if (
     patch.gachaEnabled !== undefined &&
