@@ -91,6 +91,14 @@ export interface EventConfig {
    */
   omikujiEnabled: boolean;
   /**
+   * 年始プッシュ（1月1日0時台に登録者全員へ挨拶を自動送信）を使うかどうか
+   * （主催者が設定。既定オン）。導入前に作られたイベントには項目自体が
+   * 無いため、読み取り時は true に倒す。
+   */
+  newYearPushEnabled: boolean;
+  /** 年始プッシュを最後に送った年（JST）。二重送信防止の記録。 */
+  newYearPushSentYear?: number;
+  /**
    * ガチャを使うかどうか（主催者が設定。既定オフ）。
    * 導入前に作られたイベントには項目自体が無いため、読み取り時は false に倒す。
    */
@@ -181,6 +189,7 @@ export interface CreateEventInput {
   defaultLocale?: Locale;
   admissionQrEnabled?: boolean;
   omikujiEnabled?: boolean;
+  newYearPushEnabled?: boolean;
   gachaEnabled?: boolean;
   gachaPrizes?: GachaPrize[];
   links?: EventLink[];

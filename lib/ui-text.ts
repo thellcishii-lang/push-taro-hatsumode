@@ -2469,6 +2469,18 @@ export const ADMIN_TEXT = {
     zh: '关闭后，访客页面将不再显示御神签（已抽取的结果会保留）。',
     ko: '끄면 방문자 화면에 오미쿠지가 표시되지 않습니다(이미 뽑은 결과는 남습니다).',
   },
+  newYearPushEnabledLabel: {
+    ja: '年始プッシュを自動で送る',
+    en: 'Send the New Year push automatically',
+    zh: '自动发送新年推送',
+    ko: '새해 푸시를 자동으로 보내기',
+  },
+  newYearPushEnabledNote: {
+    ja: 'オンにすると、1月1日の0時台に登録者全員へ新年の挨拶プッシュを1回だけ自動で送ります。',
+    en: 'When on, a New Year greeting push is sent automatically once to all registered visitors shortly after midnight on January 1.',
+    zh: '开启后，将在1月1日0点时段自动向所有已注册访客发送一次新年祝福推送。',
+    ko: '켜면 1월 1일 0시대에 등록자 전원에게 새해 인사 푸시를 1회 자동으로 보냅니다.',
+  },
   gachaEnabledLabel: {
     ja: 'ガチャを使う',
     en: 'Use gacha',
