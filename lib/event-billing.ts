@@ -841,6 +841,171 @@ export function buildBillingPaymentsCsv(
   return '\uFEFF' + lines.join('\r\n') + '\r\n';
 }
 
+// ─── 入金の集計（集計CSV・集計レポート用） ───
+//
+// 明細CSVが「他のソフトへ読み込ませる生データ」なのに対し、こちらは
+// 集計ソフトのレポートのように期間で畳んだ集計。日付の区切りは明細CSVと
+// 同じく JST（formatJstDateTime の日付部分）でそろえる。
+
+/** 期間ごとの集計（日次・月次・年次で共用）。 */
+export interface BillingSummaryBucket {
+  /** 'YYYY-MM-DD'（日次）/ 'YYYY-MM'（月次）/ 'YYYY'（年次） */
+  period: string;
+  paidCount: number;
+  paidAmount: number;
+  failedCount: number;
+}
+
+/** 出店者別月次の集計。 */
+export interface BillingShopMonthlyBucket {
+  /** 'YYYY-MM' */
+  month: string;
+  exhibitorId: string;
+  shopName: string;
+  paidCount: number;
+  paidAmount: number;
+  failedCount: number;
+}
+
+export interface BillingSummary {
+  daily: BillingSummaryBucket[];
+  monthly: BillingSummaryBucket[];
+  yearly: BillingSummaryBucket[];
+  shopMonthly: BillingShopMonthlyBucket[];
+  totalPaidCount: number;
+  totalPaidAmount: number;
+  totalFailedCount: number;
+}
+
+/**
+ * 支払い記録を日次・月次・年次・出店者別月次に集計する（純粋関数）。
+ * 日付は明細CSVと同じ基準（paidAt、無ければ occurredAt、JST）。
+ * 日付として読めない記録は集計から除く。
+ */
+export function summarizeBillingPayments(
+  payments: BillingPaymentRecord[],
+  exhibitors: BillingCsvExhibitor[],
+): BillingSummary {
+  const exhibitorById = new Map(exhibitors.map((e) => [e.id, e]));
+  const daily = new Map<string, BillingSummaryBucket>();
+  const monthly = new Map<string, BillingSummaryBucket>();
+  const yearly = new Map<string, BillingSummaryBucket>();
+  const shopMonthly = new Map<string, BillingShopMonthlyBucket>();
+  let totalPaidCount = 0;
+  let totalPaidAmount = 0;
+  let totalFailedCount = 0;
+
+  const bucketFor = (
+    map: Map<string, BillingSummaryBucket>,
+    period: string,
+  ): BillingSummaryBucket => {
+    let bucket = map.get(period);
+    if (!bucket) {
+      bucket = { period, paidCount: 0, paidAmount: 0, failedCount: 0 };
+      map.set(period, bucket);
+    }
+    return bucket;
+  };
+
+  for (const payment of payments) {
+    const date = formatJstDateTime(payment.paidAt ?? payment.occurredAt).slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const buckets = [
+      bucketFor(daily, date),
+      bucketFor(monthly, date.slice(0, 7)),
+      bucketFor(yearly, date.slice(0, 4)),
+    ];
+    const shopKey = `${date.slice(0, 7)}|${payment.exhibitorId}`;
+    let shopBucket = shopMonthly.get(shopKey);
+    if (!shopBucket) {
+      shopBucket = {
+        month: date.slice(0, 7),
+        exhibitorId: payment.exhibitorId,
+        shopName: exhibitorById.get(payment.exhibitorId)?.name ?? payment.exhibitorId,
+        paidCount: 0,
+        paidAmount: 0,
+        failedCount: 0,
+      };
+      shopMonthly.set(shopKey, shopBucket);
+    }
+    if (payment.status === 'paid') {
+      for (const bucket of buckets) {
+        bucket.paidCount += 1;
+        bucket.paidAmount += payment.amount;
+      }
+      shopBucket.paidCount += 1;
+      shopBucket.paidAmount += payment.amount;
+      totalPaidCount += 1;
+      totalPaidAmount += payment.amount;
+    } else {
+      for (const bucket of buckets) bucket.failedCount += 1;
+      shopBucket.failedCount += 1;
+      totalFailedCount += 1;
+    }
+  }
+
+  const byPeriod = (a: BillingSummaryBucket, b: BillingSummaryBucket) =>
+    a.period.localeCompare(b.period);
+  return {
+    daily: [...daily.values()].sort(byPeriod),
+    monthly: [...monthly.values()].sort(byPeriod),
+    yearly: [...yearly.values()].sort(byPeriod),
+    shopMonthly: [...shopMonthly.values()].sort(
+      (a, b) =>
+        a.month.localeCompare(b.month) ||
+        b.paidAmount - a.paidAmount ||
+        a.shopName.localeCompare(b.shopName),
+    ),
+    totalPaidCount,
+    totalPaidAmount,
+    totalFailedCount,
+  };
+}
+
+/** 集計CSVの組み立て（純粋関数）。明細CSVと同じ BOM + CRLF。 */
+export function buildBillingSummaryCsv(summary: BillingSummary): string {
+  const lines: string[] = [];
+  const section = (
+    title: string,
+    header: string[],
+    rows: string[][],
+  ): void => {
+    lines.push(title);
+    lines.push(header.map(csvEscape).join(','));
+    for (const row of rows) lines.push(row.map(csvEscape).join(','));
+    lines.push('');
+  };
+  const bucketRow = (bucket: BillingSummaryBucket): string[] => [
+    bucket.period,
+    String(bucket.paidCount),
+    String(bucket.paidAmount),
+    String(bucket.failedCount),
+  ];
+  const periodHeader = ['期間', '入金件数', '入金額', '失敗件数'];
+  section('【日次集計】', periodHeader, summary.daily.map(bucketRow));
+  section('【月次集計】', periodHeader, summary.monthly.map(bucketRow));
+  section('【年次集計】', periodHeader, summary.yearly.map(bucketRow));
+  section(
+    '【出店者別月次集計】',
+    ['月', '店名', '入金件数', '入金額', '失敗件数'],
+    summary.shopMonthly.map((bucket) => [
+      bucket.month,
+      bucket.shopName,
+      String(bucket.paidCount),
+      String(bucket.paidAmount),
+      String(bucket.failedCount),
+    ]),
+  );
+  section('【総合計】', ['入金件数', '入金額', '失敗件数'], [
+    [
+      String(summary.totalPaidCount),
+      String(summary.totalPaidAmount),
+      String(summary.totalFailedCount),
+    ],
+  ]);
+  return '\uFEFF' + lines.join('\r\n') + '\r\n';
+}
+
 // ─── オプション有効な契約者の解決 ───
 
 /**
