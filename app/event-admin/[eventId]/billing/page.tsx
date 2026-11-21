@@ -216,6 +216,8 @@ export default function EventBillingAdminPage() {
   const [exhibitors, setExhibitors] = useState<Array<{ id: string; name: string }>>([]);
   const [billings, setBillings] = useState<ShopBillingItem[]>([]);
   const [payments, setPayments] = useState<BillingPaymentItem[]>([]);
+  const [csvBusy, setCsvBusy] = useState(false);
+  const [csvMessage, setCsvMessage] = useState('');
   const [summary, setSummary] = useState<BillingSummary | null>(null);
   const [loadMessage, setLoadMessage] = useState('');
   const [amountInputs, setAmountInputs] = useState<Record<string, string>>({});
@@ -464,6 +466,36 @@ export default function EventBillingAdminPage() {
       </main>
     );
   }
+
+  // 入金一覧 CSV のダウンロード。認証ヘッダが要るので fetch で取得して
+  // Blob から保存する（全件・店名/種別つき）。
+  const handleDownloadCsv = async () => {
+    if (!user) return;
+    setCsvBusy(true);
+    setCsvMessage('');
+    try {
+      const idToken = await user.getIdToken();
+      const res = await fetch(`/api/events/${eventId}/shop-billings/export`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+      if (!res.ok) throw new Error(adminText(locale, 'billingCsvFailed'));
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `billing-payments-${eventId}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setCsvMessage(
+        e instanceof Error ? e.message : adminText(locale, 'billingCsvFailed'),
+      );
+    } finally {
+      setCsvBusy(false);
+    }
+  };
 
   const billingByExhibitor = new Map(billings.map((b) => [b.exhibitorId, b]));
   const exhibitorName = (id: string) =>
@@ -892,7 +924,28 @@ export default function EventBillingAdminPage() {
           </section>
 
           <section style={{ marginTop: 32 }}>
-            <h2 style={sectionTitleStyle}>{adminText(locale, 'billingPaymentsTitle')}</h2>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                flexWrap: 'wrap',
+              }}
+            >
+              <h2 style={sectionTitleStyle}>{adminText(locale, 'billingPaymentsTitle')}</h2>
+              <button
+                onClick={() => void handleDownloadCsv()}
+                disabled={csvBusy}
+                style={secondaryButtonStyle}
+              >
+                <span style={adminButtonContentStyle}>
+                  {csvBusy && <ButtonSpinner />}
+                  {adminText(locale, 'billingCsvDownload')}
+                </span>
+              </button>
+            </div>
+            {csvMessage && <p style={adminErrorTextStyle}>{csvMessage}</p>}
             {payments.length === 0 ? (
               <p style={{ fontSize: 14, color: '#64748b', marginTop: 12 }}>
                 {adminText(locale, 'billingPaymentsEmpty')}

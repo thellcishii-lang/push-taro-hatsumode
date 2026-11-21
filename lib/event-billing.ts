@@ -762,6 +762,85 @@ export async function listBillingPayments(
   });
 }
 
+// ─── 純粋関数: 入金一覧 CSV ───
+
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+/**
+ * ISO文字列を JST の ISO 表記（'YYYY-MM-DDTHH:mm:ss+09:00'）にする。
+ * 解釈できなければ空文字。
+ */
+export function formatJstDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Date(date.getTime() + JST_OFFSET_MS).toISOString().slice(0, 19) + '+09:00';
+}
+
+function csvEscape(value: string): string {
+  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+export interface BillingCsvExhibitor {
+  id: string;
+  name: string;
+}
+
+export const BILLING_PAYMENTS_CSV_HEADER = [
+  '日時',
+  '店名',
+  '種別',
+  '金額',
+  '状態',
+  'Stripe請求書ID',
+  'チェックアウトセッションID',
+  'サブスクリプションID',
+] as const;
+
+/** 課金形態の表示ラベル（CSV用）。 */
+const BILLING_TYPE_LABELS: Record<ShopBillingType, string> = {
+  subscription: '月額',
+  'one-time': '一括払い',
+};
+
+/**
+ * 入金一覧の CSV を組み立てる（純粋関数）。
+ * - 種別は出店者ごとの課金レコードの課金形態（月額／一括払い）から引く
+ *   （支払い記録自体には持っていないため。課金レコードが無い行は空欄）。
+ * - 店名は出店者から、サブスクリプションIDとチェックアウト
+ *   セッションIDは課金レコードから引く（セッションIDはその店の直近の
+ *   発行セッション）。
+ * - 行は発生日時の昇順（経理で読みやすい時系列）。
+ * - 先頭に BOM を付け、Excel でそのまま開けるようにする。
+ */
+export function buildBillingPaymentsCsv(
+  payments: BillingPaymentRecord[],
+  exhibitors: BillingCsvExhibitor[],
+  billings: ShopBilling[],
+): string {
+  const exhibitorById = new Map(exhibitors.map((e) => [e.id, e]));
+  const billingByExhibitor = new Map(billings.map((b) => [b.exhibitorId, b]));
+  const sorted = [...payments].sort((a, b) =>
+    a.occurredAt.localeCompare(b.occurredAt),
+  );
+  const lines: string[] = [BILLING_PAYMENTS_CSV_HEADER.join(',')];
+  for (const payment of sorted) {
+    const exhibitor = exhibitorById.get(payment.exhibitorId);
+    const billing = billingByExhibitor.get(payment.exhibitorId);
+    const row = [
+      formatJstDateTime(payment.paidAt ?? payment.occurredAt),
+      exhibitor?.name ?? payment.exhibitorId,
+      billing ? BILLING_TYPE_LABELS[billing.billingType] : '',
+      String(payment.amount),
+      payment.status === 'paid' ? '支払い済み' : '失敗',
+      payment.stripeInvoiceId ?? '',
+      billing?.checkoutSessionId ?? '',
+      billing?.stripeSubscriptionId ?? '',
+    ];
+    lines.push(row.map(csvEscape).join(','));
+  }
+  return '\uFEFF' + lines.join('\r\n') + '\r\n';
+}
+
 // ─── オプション有効な契約者の解決 ───
 
 /**

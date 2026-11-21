@@ -1371,6 +1371,18 @@ export const ADMIN_TEXT = {
     zh: '最近的付款',
     ko: '최근 결제',
   },
+  billingCsvDownload: {
+    ja: 'CSVダウンロード',
+    en: 'Download CSV',
+    zh: '下载CSV',
+    ko: 'CSV 다운로드',
+  },
+  billingCsvFailed: {
+    ja: 'CSVのダウンロードに失敗しました',
+    en: 'Failed to download the CSV',
+    zh: 'CSV下载失败',
+    ko: 'CSV 다운로드에 실패했습니다',
+  },
   billingPaymentsEmpty: {
     ja: 'まだ支払い記録がありません。',
     en: 'No payment records yet.',
