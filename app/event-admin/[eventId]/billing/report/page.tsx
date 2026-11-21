@@ -109,6 +109,10 @@ export default function BillingReportPage() {
   const [summary, setSummary] = useState<SummaryData | null>(null);
   const [generatedAt, setGeneratedAt] = useState('');
   const [message, setMessage] = useState('');
+  // 期間の絞り込み（'' = すべて）。月次は年で、日次と店舗別月次は月で分ける。
+  const [monthlyYear, setMonthlyYear] = useState('');
+  const [dailyMonth, setDailyMonth] = useState('');
+  const [shopMonth, setShopMonth] = useState('');
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
@@ -182,14 +186,51 @@ export default function BillingReportPage() {
     );
   }
 
+  const periodSelect = (
+    value: string,
+    onChange: (next: string) => void,
+    options: string[],
+  ) => (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      style={{
+        padding: '7px 10px',
+        borderRadius: 10,
+        border: '1px solid #E8DCC4',
+        fontSize: 13,
+        backgroundColor: '#ffffff',
+      }}
+    >
+      <option value="">{adminText(locale, 'billingReportAllPeriods')}</option>
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {option}
+        </option>
+      ))}
+    </select>
+  );
+
   const bucketTable = (
     titleKey: Parameters<typeof adminText>[1],
     rows: SummaryBucket[],
+    control?: React.ReactNode,
   ) => (
     <section style={{ ...cardStyle, marginTop: 20 }}>
-      <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>
-        {adminText(locale, titleKey)}
-      </h2>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 12,
+          flexWrap: 'wrap',
+        }}
+      >
+        <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>
+          {adminText(locale, titleKey)}
+        </h2>
+        {control}
+      </div>
       <table style={tableStyle}>
         <thead>
           <tr>
@@ -226,6 +267,7 @@ export default function BillingReportPage() {
           body * { visibility: hidden; }
           #billing-report, #billing-report * { visibility: visible; }
           #billing-report { position: absolute; inset: 0; padding: 0; }
+          #billing-report select { display: none; }
         }
       `}</style>
       <div style={containerStyle}>
@@ -326,14 +368,53 @@ export default function BillingReportPage() {
                 </div>
               </section>
 
-              {bucketTable('billingReportMonthly', summary.monthly)}
+              {bucketTable(
+                'billingReportMonthly',
+                monthlyYear
+                  ? summary.monthly.filter((row) =>
+                      row.period.startsWith(monthlyYear),
+                    )
+                  : summary.monthly,
+                periodSelect(
+                  monthlyYear,
+                  setMonthlyYear,
+                  summary.yearly.map((row) => row.period),
+                ),
+              )}
               {bucketTable('billingReportYearly', summary.yearly)}
-              {bucketTable('billingReportDaily', summary.daily)}
+              {bucketTable(
+                'billingReportDaily',
+                dailyMonth
+                  ? summary.daily.filter((row) =>
+                      row.period.startsWith(dailyMonth),
+                    )
+                  : summary.daily,
+                periodSelect(
+                  dailyMonth,
+                  setDailyMonth,
+                  summary.monthly.map((row) => row.period),
+                ),
+              )}
 
               <section style={{ ...cardStyle, marginTop: 20 }}>
-                <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>
-                  {adminText(locale, 'billingReportShopMonthly')}
-                </h2>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>
+                    {adminText(locale, 'billingReportShopMonthly')}
+                  </h2>
+                  {periodSelect(
+                    shopMonth,
+                    setShopMonth,
+                    summary.monthly.map((row) => row.period),
+                  )}
+                </div>
                 <table style={tableStyle}>
                   <thead>
                     <tr>
@@ -345,7 +426,12 @@ export default function BillingReportPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {summary.shopMonthly.map((row) => (
+                    {(shopMonth
+                      ? summary.shopMonthly.filter(
+                          (row) => row.month === shopMonth,
+                        )
+                      : summary.shopMonthly
+                    ).map((row) => (
                       <tr key={`${row.month}|${row.exhibitorId}`}>
                         <td style={tdStyle}>{row.month}</td>
                         <td style={tdStyle}>{row.shopName}</td>

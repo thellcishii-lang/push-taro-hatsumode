@@ -1395,6 +1395,12 @@ export const ADMIN_TEXT = {
     zh: '汇总报告',
     ko: '집계 리포트',
   },
+  billingReportAllPeriods: {
+    ja: 'すべて',
+    en: 'All periods',
+    zh: '全部期间',
+    ko: '전체 기간',
+  },
   billingReportTitle: {
     ja: '集計レポート',
     en: 'Billing summary report',
