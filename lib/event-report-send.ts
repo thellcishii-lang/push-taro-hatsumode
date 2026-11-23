@@ -34,6 +34,7 @@ return false;
 }
 
 const result = await sendEmail({
+template: 'hatsumode',
 to: organizerEmail,
 subject: `開催結果レポート：${report.eventName}`,
 html: formatFinalReportHtml(report),

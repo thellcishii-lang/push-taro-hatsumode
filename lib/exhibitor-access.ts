@@ -297,7 +297,7 @@ sendMail: ExhibitorMailSender;
 
 const defaultDeps: ExhibitorAccessDeps = {
 store: firestoreExhibitorAccessStore,
-sendMail: (args) => sendEmail(args),
+sendMail: (args) => sendEmail({ ...args, template: 'hatsumode' }),
 };
 
 function escapeHtml(value: string): string {

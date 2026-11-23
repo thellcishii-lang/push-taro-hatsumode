@@ -1,6 +1,9 @@
 // lib/mailer.ts
 import nodemailer from 'nodemailer';
 import sanitizeHtml from 'sanitize-html';
+import { wrapMailTemplate, type MailProduct } from './mail-template';
+
+export type { MailProduct } from './mail-template';
 
 const infoMailUser = process.env.INFOMAIL_USER?.trim();
 const infoMailPass = process.env.INFOMAIL_PASS?.trim();
@@ -51,12 +54,21 @@ export async function sendEmail({
   to,
   subject,
   html,
+  text,
   attachments,
+  template,
 }: {
   to: string;
   subject: string;
   html: string;
+  text?: string;
   attachments?: any[];
+  /**
+   * お客さん向けメールの「型」（lib/mail-template）。
+   * 指定すると本文に製品ごとの枠・色を被せ、会社フッターの自動付加は行わない
+   * （型側に署名フッターがあるため）。運営者向けの内部通知では指定しない。
+   */
+  template?: MailProduct;
 }) {
   if (!transporter || !infoMailUser || !infoMailPass) {
     const errorMessage = 'メール送信は未設定です。INFOMAIL_USER と INFOMAIL_PASS を環境変数に設定してください。';
@@ -69,7 +81,10 @@ export async function sendEmail({
       from: `Push-taro <${fromAddress}>`,
       to,
       subject,
-      html: sanitizeEmailHtml(addCompanyFooter(html)),
+      html: sanitizeEmailHtml(
+        template ? wrapMailTemplate(html, template) : addCompanyFooter(html)
+      ),
+      ...(text ? { text } : {}),
       attachments,
     });
     console.log('[Mailer] メール送信成功:', info.messageId);
