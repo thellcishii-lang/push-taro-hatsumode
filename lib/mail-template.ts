@@ -11,7 +11,12 @@
  *
  * 構造（見本: ~/workspace/product_ideas/customer_mail_template_mock.html）:
  *   製品カラーの帯ヘッダー（Push-taro＋赤ドット＋シリーズ名、肩書き）
- *   ／白地の本文エリア／署名フッター（製品名・info@push-taro.com）
+ *   ／白地の本文エリア／署名フッター
+ *
+ * フッターの確定形（2026-11-23 Ishii 決定）:
+ *   製品名／会社名／住所／メールアドレス／製品ごとのサイトURL。
+ *   会社名・住所は、従来 lib/mailer.ts が全メールに自動付加していた
+ *   会社フッターの文字列をそのまま使う。
  *
  * このモジュールはクライアントからも import できるよう、
  * サーバー専用の依存（nodemailer 等）を持たない純粋なモジュールにする
@@ -30,6 +35,8 @@ export interface MailProductConfig {
   id: MailProduct;
   /** セレクター等での表示名 */
   label: string;
+  /** フッター1行目の製品名 */
+  productName: string;
   /** 帯ヘッダーの背景色 */
   bandColor: string;
   /** 帯の上の肩書きテキストの色 */
@@ -38,72 +45,75 @@ export interface MailProductConfig {
   seriesName: string;
   /** 帯の上の肩書き */
   tagline: string;
-  /** フッター1行目（製品名・メールアドレス） */
-  footerName: string;
-  /** フッター2行目 */
-  footerTagline: string;
+  /** フッターの製品サイトURL（各製品LPの canonical と同一） */
+  siteUrl: string;
 }
+
+/** 会社フッター（従来 mailer が自動付加していた文字列と同一） */
+export const MAIL_COMPANY_LINE = '運営会社：the合同会社';
+export const MAIL_COMPANY_ADDRESS = '〒357-0123 埼玉県飯能市中藤下郷23-21';
+export const MAIL_CONTACT_EMAIL = 'info@push-taro.com';
 
 export const MAIL_PRODUCTS: Record<MailProduct, MailProductConfig> = {
   'push-taro': {
     id: 'push-taro',
     label: 'Push-taro（本体）',
+    productName: 'Push-taro',
     bandColor: '#14213d',
     accentColor: '#fca311',
     seriesName: '',
     tagline: '店舗向けプッシュ通知',
-    footerName: 'Push-taro.com（info@push-taro.com）',
-    footerTagline: '店舗向けプッシュ通知×クーポンアプリ',
+    siteUrl: 'https://push-taro.com',
   },
   event: {
     id: 'event',
     label: 'Push-taro.EVENT',
+    productName: 'Push-taro.EVENT',
     bandColor: '#4c1d95',
     accentColor: '#c4b5fd',
     seriesName: 'EVENT',
     tagline: '展示会・イベント',
-    footerName: 'Push-taro EVENT（info@push-taro.com）',
-    footerTagline: '展示会・イベント向けプッシュ通知×クーポンアプリ',
+    siteUrl: 'https://push-taro.com/event',
   },
   machiokoshi: {
     id: 'machiokoshi',
     label: 'Push-taro.町おこし',
+    productName: 'Push-taro.町おこし',
     bandColor: '#5c4033',
     accentColor: '#e8c07a',
     seriesName: '町おこし',
     tagline: 'ご当地グルメで町おこし',
-    footerName: 'Push-taro.町おこし（info@push-taro.com）',
-    footerTagline: 'ご当地グルメで町おこしを仕組み化するアプリ',
+    siteUrl: 'https://push-taro.com/machiokoshi',
   },
   fes: {
     id: 'fes',
     label: 'Push-taro FES',
+    productName: 'Push-taro FES',
     bandColor: '#0e7c86',
     accentColor: '#a5f3fc',
     seriesName: 'FES',
     tagline: 'フェス・コンサート',
-    footerName: 'Push-taro FES（info@push-taro.com）',
-    footerTagline: 'フェス・コンサート向けプッシュ通知アプリ',
+    siteUrl: 'https://push-taro.com/fes',
   },
   hatsumode: {
     id: 'hatsumode',
     label: 'Push-taro 初詣',
+    productName: 'Push-taro 初詣',
     bandColor: '#d93a2b',
     accentColor: '#ffd9cf',
     seriesName: '初詣',
     tagline: '初詣の誘導と安全を届ける仕組み',
-    footerName: 'Push-taro 初詣（info@push-taro.com）',
-    footerTagline: '初詣の誘導と安全を、一人一人に届ける仕組み',
+    siteUrl: 'https://push-taro.com/event/newyear',
   },
   stamprally: {
     id: 'stamprally',
     label: 'Push-taro.スタンプラリー',
+    productName: 'Push-taro.スタンプラリー',
     bandColor: '#d93a2b',
     accentColor: '#ffd9cf',
     seriesName: 'スタンプラリー',
     tagline: 'スタンプラリーが簡単に仕込める',
-    footerName: 'Push-taro.スタンプラリー（info@push-taro.com）',
-    footerTagline: 'スタンプラリーが簡単に仕込めるアプリ',
+    siteUrl: 'https://push-taro.com/stamprally',
   },
 };
 
@@ -143,8 +153,11 @@ export function wrapMailTemplate(bodyHtml: string, product: MailProduct): string
 ${bodyHtml}
     </div>
     <div style="border-top:1px solid #eee5d8;padding:14px 22px;font-size:11.5px;color:#8a8175;line-height:1.7;">
-      ${config.footerName}<br />
-      ${config.footerTagline}
+      ${config.productName}<br />
+      ${MAIL_COMPANY_LINE}<br />
+      ${MAIL_COMPANY_ADDRESS}<br />
+      <a href="mailto:${MAIL_CONTACT_EMAIL}" style="color:#8a8175;">${MAIL_CONTACT_EMAIL}</a><br />
+      <a href="${config.siteUrl}" style="color:#8a8175;">${config.siteUrl}</a>
     </div>
   </div>
 </div>`;
