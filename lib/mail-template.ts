@@ -18,6 +18,10 @@
  *   会社名・住所は、従来 lib/mailer.ts が全メールに自動付加していた
  *   会社フッターの文字列をそのまま使う。
  *
+ * 横幅（2026-11-24 Ishii 指示）:
+ *   固定幅（max-width:520px・中央寄せ）はやめ、カードは画面幅いっぱいに
+ *   広げる。外側の余白は左右16pxだけ残し、文字が端に張り付かないようにする。
+ *
  * このモジュールはクライアントからも import できるよう、
  * サーバー専用の依存（nodemailer 等）を持たない純粋なモジュールにする
  * （admin のメール作成画面のプレビュー・製品セレクターで使う）。
@@ -143,8 +147,8 @@ export function wrapMailTemplate(bodyHtml: string, product: MailProduct): string
     ? `<span style="font-size:13px;">${config.seriesName}</span>`
     : '';
   return `
-<div style="background:#f4f1ec;padding:24px 12px;font-family:-apple-system,'Hiragino Kaku Gothic ProN','Hiragino Sans',sans-serif;">
-  <div style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #e5ded2;border-radius:12px;overflow:hidden;">
+<div style="background:#f4f1ec;padding:24px 16px;font-family:-apple-system,'Hiragino Kaku Gothic ProN','Hiragino Sans',sans-serif;">
+  <div style="width:100%;box-sizing:border-box;margin:0;background:#ffffff;border:1px solid #e5ded2;border-radius:12px;overflow:hidden;">
     <div style="background:${config.bandColor};padding:16px 22px;">
       <span style="color:#ffffff;font-size:18px;font-weight:900;letter-spacing:-0.3px;">Push-taro<span style="color:#ff4500;">.</span>${series}</span>
       <span style="color:${config.accentColor};font-size:12px;font-weight:700;margin-left:8px;">${config.tagline}</span>
